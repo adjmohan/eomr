@@ -1,20 +1,36 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'wouter';
+import { useParams, Link } from 'wouter';
 import axios from 'axios';
 import toast, { Toaster } from 'react-hot-toast';
 import { 
   Download, 
   FileText, 
   Printer, 
-  ArrowLeft,
-  Home
+  ArrowLeft
 } from 'lucide-react';
 
+interface Subject {
+  subject: string;
+  teacherName: string;
+  percentage: number;
+  isUploaded?: boolean;
+}
+
+interface ResultsData {
+  batchCode: string;
+  phase: string;
+  totalStudents: number;
+  subjects: Subject[];
+  dataSource?: string;
+  mongodbStatus?: string;
+}
+
 const ResultsPage = () => {
-  const { batchCode } = useParams();
-  const [results, setResults] = useState<any>(null);
+  const params = useParams();
+  const batchCode = params.batchCode;
+  const [results, setResults] = useState<ResultsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchResults = useCallback(async () => {
     try {
@@ -23,13 +39,16 @@ const ResultsPage = () => {
       setResults(response.data);
       
       // Show success message with data source info
-      if (response.data.dataSource === 'database') {
+      if (response.data.dataSource === 'memory') {
+        toast.success('Results loaded from temporary storage (database unavailable)');
+      } else if (response.data.dataSource === 'database') {
         toast.success('Results loaded from database');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching results:', error);
       const errorMessage = error.response?.data?.message || 'Failed to fetch results';
-      setError(errorMessage);
+      const suggestion = error.response?.data?.suggestion || '';
+      setError(`${errorMessage}${suggestion ? ` - ${suggestion}` : ''}`);
       toast.error('Failed to load results');
     } finally {
       setLoading(false);
@@ -48,14 +67,33 @@ const ResultsPage = () => {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${batchCode}_results.csv`);
+      link.setAttribute('download', `${batchCode}_results.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      toast.success('CSV file downloaded successfully');
+      toast.success('Excel file downloaded successfully');
     } catch (error) {
-      toast.error('Failed to export to CSV');
+      toast.error('Failed to export to Excel');
+    }
+  };
+
+  const exportToPDF = async () => {
+    try {
+      const response = await axios.get(`http://localhost:5001/api/export/pdf/${batchCode}`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${batchCode}_results.html`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('HTML file downloaded successfully! Open it in your browser and use Ctrl+P to save as PDF.');
+    } catch (error) {
+      toast.error('Failed to export to HTML');
     }
   };
 
@@ -64,8 +102,8 @@ const ResultsPage = () => {
     toast.success('Print dialog opened');
   };
 
-  const getSubjectColor = (subject) => {
-    const colors = {
+  const getSubjectColor = (subject: string): string => {
+    const colors: Record<string, string> = {
       physics: '#3b82f6',
       chemistry: '#10b981',
       maths: '#f59e0b',
@@ -85,7 +123,7 @@ const ResultsPage = () => {
     return colors[subject.toLowerCase()] || '#6b7280';
   };
 
-  const getPerformanceLevel = (percentage) => {
+  const getPerformanceLevel = (percentage: number): { level: string; color: string } => {
     if (percentage >= 90) return { level: 'Excellent', color: '#10b981' };
     if (percentage >= 80) return { level: 'Very Good', color: '#3b82f6' };
     if (percentage >= 70) return { level: 'Good', color: '#f59e0b' };
@@ -95,10 +133,13 @@ const ResultsPage = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading results...</p>
+      <div className="results-page">
+        <Toaster position="top-right" />
+        <div className="main-container">
+          <div className="loading">
+            <div className="spinner"></div>
+            <p>Loading results...</p>
+          </div>
         </div>
       </div>
     );
@@ -106,17 +147,17 @@ const ResultsPage = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Error Loading Results</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
-          <button
-            onClick={() => window.location.href = '/'}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <ArrowLeft size={20} />
-            Back to Upload
-          </button>
+      <div className="results-page">
+        <Toaster position="top-right" />
+        <div className="main-container">
+          <div className="error">
+            <h2>Error Loading Results</h2>
+            <p>{error}</p>
+            <Link href="/" className="submit-btn" style={{ display: 'inline-block', marginTop: '20px' }} data-testid="link-back-upload">
+              <ArrowLeft size={20} />
+              Back to Upload
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -124,124 +165,142 @@ const ResultsPage = () => {
 
   if (!results) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">No Results Found</h2>
-          <p className="text-gray-600 mb-6">No results found for batch code: {batchCode}</p>
-          <button
-            onClick={() => window.location.href = '/'}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <ArrowLeft size={20} />
-            Back to Upload
-          </button>
+      <div className="results-page">
+        <Toaster position="top-right" />
+        <div className="main-container">
+          <div className="error">
+            <h2>No Results Found</h2>
+            <p>No results found for batch code: {batchCode}</p>
+            <Link href="/" className="submit-btn" style={{ display: 'inline-block', marginTop: '20px' }} data-testid="link-back-upload-no-results">
+              <ArrowLeft size={20} />
+              Back to Upload
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="results-page">
       <Toaster position="top-right" />
       
-      <div className="max-w-6xl mx-auto px-4">
+      <div className="main-container">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Batch Code: {results.batchCode}</h1>
-              <p className="text-lg text-gray-600 mt-2">
-                Phase: {results.phase} • Total Students: {results.totalStudents}
-              </p>
-              {results.dataSource && (
-                <div className="flex items-center gap-2 mt-2">
-                  <div className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                    📊 Database
-                  </div>
+        <div className="results-header">
+          <div className="results-info">
+            <h1 data-testid="text-batch-code">Batch Code: {results.batchCode}</h1>
+            <p data-testid="text-batch-info">Phase: {results.phase} • Total Students: {results.totalStudents}</p>
+            {results.dataSource && (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '10px', 
+                marginTop: '8px',
+                fontSize: '0.9rem'
+              }}>
+                <div style={{
+                  padding: '4px 8px',
+                  borderRadius: '12px',
+                  fontSize: '0.8rem',
+                  fontWeight: '500',
+                  background: results.dataSource === 'database' ? '#dcfce7' : '#fef3c7',
+                  color: results.dataSource === 'database' ? '#166534' : '#92400e'
+                }} data-testid="status-data-source">
+                  {results.dataSource === 'database' ? '📊 Database' : '💾 Memory'}
                 </div>
-              )}
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => window.location.href = '/'}
-                className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <Home size={16} />
-                Home
-              </button>
-              <button
-                onClick={exportToExcel}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-              >
-                <Download size={16} />
-                Export CSV
-              </button>
-              <button
-                onClick={handlePrint}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Printer size={16} />
-                Print
-              </button>
-            </div>
+                {results.mongodbStatus === 'disconnected' && (
+                  <div style={{
+                    padding: '4px 8px',
+                    borderRadius: '12px',
+                    fontSize: '0.8rem',
+                    fontWeight: '500',
+                    background: '#fef2f2',
+                    color: '#dc2626'
+                  }} data-testid="status-database-offline">
+                    ⚠️ Database Offline
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="export-buttons">
+            <button onClick={exportToExcel} className="export-btn export-excel" data-testid="button-export-excel">
+              <Download size={16} />
+              Export to Excel
+            </button>
+            <button onClick={exportToPDF} className="export-btn export-pdf" data-testid="button-export-pdf">
+              <FileText size={16} />
+              Export to HTML
+            </button>
+            <button onClick={handlePrint} className="export-btn export-print" data-testid="button-print">
+              <Printer size={16} />
+              Print
+            </button>
           </div>
         </div>
 
         {/* Subject Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="subjects-grid-results">
           {results.subjects.map((subject, index) => {
             const performance = getPerformanceLevel(subject.percentage);
-            const isUploaded = subject.isUploaded !== false;
+            const isUploaded = subject.isUploaded !== false; // Default to true if not specified
             
             return (
               <div 
                 key={index} 
-                className="bg-white rounded-lg shadow-lg p-6 border-l-4"
+                className={`subject-card ${subject.subject.toLowerCase()}`}
                 style={{ 
-                  borderLeftColor: isUploaded ? getSubjectColor(subject.subject) : '#e5e7eb'
-                }}
+                  '--subject-color': getSubjectColor(subject.subject),
+                  opacity: isUploaded ? 1 : 0.6,
+                  border: isUploaded ? '2px solid var(--subject-color)' : '2px solid #e5e7eb'
+                } as React.CSSProperties}
+                data-testid={`card-subject-${index}`}
               >
-                <div className="flex items-center justify-between mb-4">
+                <div className="subject-header">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{subject.subject}</h3>
-                    <p className="text-sm text-gray-600">Teacher: {subject.teacherName}</p>
+                    <h3 className="subject-name" data-testid={`text-subject-name-${index}`}>{subject.subject}</h3>
+                    <p className="teacher-name" data-testid={`text-teacher-name-${index}`}>Teacher: {subject.teacherName}</p>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     {!isUploaded && (
-                      <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs font-medium">
+                      <div style={{
+                        padding: '4px 8px',
+                        background: '#f3f4f6',
+                        color: '#6b7280',
+                        borderRadius: '12px',
+                        fontSize: '0.7rem',
+                        fontWeight: '500'
+                      }} data-testid={`status-not-uploaded-${index}`}>
                         Not Uploaded
-                      </span>
+                      </div>
                     )}
-                    <span 
-                      className="px-3 py-1 rounded-full text-xs font-semibold"
-                      style={{ 
-                        backgroundColor: isUploaded ? (performance.color + '20') : '#f3f4f6', 
-                        color: isUploaded ? performance.color : '#6b7280'
-                      }}
-                    >
+                    <div style={{ 
+                      padding: '8px 12px', 
+                      background: isUploaded ? (performance.color + '20') : '#f3f4f6', 
+                      color: isUploaded ? performance.color : '#6b7280',
+                      borderRadius: '20px',
+                      fontSize: '0.8rem',
+                      fontWeight: '600'
+                    }} data-testid={`status-performance-${index}`}>
                       {isUploaded ? performance.level : 'No Data'}
-                    </span>
+                    </div>
                   </div>
                 </div>
                 
-                <div className="relative">
-                  <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
-                    <div 
-                      className="h-3 rounded-full transition-all duration-300"
-                      style={{ 
-                        width: `${subject.percentage}%`,
-                        backgroundColor: isUploaded ? getSubjectColor(subject.subject) : '#d1d5db'
-                      }}
-                    ></div>
-                  </div>
-                  <div className="text-right">
-                    <span 
-                      className="text-2xl font-bold"
-                      style={{ color: isUploaded ? getSubjectColor(subject.subject) : '#6b7280' }}
-                    >
-                      {subject.percentage}%
-                    </span>
-                  </div>
+                <div className="progress-bar">
+                  <div 
+                    className="progress-fill"
+                    style={{ 
+                      width: `${subject.percentage}%`,
+                      background: isUploaded ? 'var(--subject-color)' : '#d1d5db'
+                    }}
+                    data-testid={`progress-fill-${index}`}
+                  ></div>
+                </div>
+                
+                <div className="percentage" style={{ color: isUploaded ? 'inherit' : '#6b7280' }} data-testid={`text-percentage-${index}`}>
+                  {subject.percentage}%
                 </div>
               </div>
             );
@@ -249,93 +308,97 @@ const ResultsPage = () => {
         </div>
 
         {/* Detailed Table */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Detailed Subject Analysis</h2>
-          
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <h4 className="font-semibold text-blue-900 mb-3">📊 Rating System:</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+        <div className="summary-table">
+          <h2>Detailed Subject Analysis</h2>
+          <div style={{ 
+            background: '#f8fafc', 
+            padding: '15px', 
+            borderRadius: '8px', 
+            marginBottom: '20px',
+            border: '1px solid #e2e8f0'
+          }}>
+            <h4 style={{ margin: '0 0 10px 0', color: '#374151' }}>📊 Rating System:</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#10b981' }}></div>
                 <span><strong>Excellent:</strong> 5 points (90%+)</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#f59e0b' }}></div>
                 <span><strong>Good:</strong> 3 points (70-89%)</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500"></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ef4444' }}></div>
                 <span><strong>Poor:</strong> 1 point (Below 70%)</span>
               </div>
             </div>
-            <p className="text-blue-800 text-sm mt-3">
+            <p style={{ margin: '10px 0 0 0', fontSize: '0.9rem', color: '#6b7280' }}>
               💡 <strong>Any marking style accepted:</strong> Ticks, crosses, shading, filled shapes, underlines, or any creative marking!
             </p>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto border-collapse">
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-900">Subject</th>
-                  <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-900">Status</th>
-                  <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-900">Percentage</th>
-                  <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-900">Teacher Name</th>
-                  <th className="border border-gray-300 px-4 py-3 text-left font-semibold text-gray-900">Performance Level</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.subjects.map((subject, index) => {
-                  const isUploaded = subject.isUploaded !== false;
-                  const performance = getPerformanceLevel(subject.percentage);
-                  
-                  return (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div 
-                            className="w-3 h-3 rounded-full"
-                            style={{ 
-                              backgroundColor: isUploaded ? getSubjectColor(subject.subject) : '#d1d5db' 
-                            }}
-                          ></div>
-                          <span className="font-medium">{subject.subject}</span>
-                        </div>
-                      </td>
-                      <td className="border border-gray-300 px-4 py-3">
-                        <span 
-                          className="px-2 py-1 rounded-full text-xs font-medium"
-                          style={{
-                            backgroundColor: isUploaded ? '#dcfce7' : '#f3f4f6',
-                            color: isUploaded ? '#166534' : '#6b7280'
-                          }}
-                        >
-                          {isUploaded ? 'Processed' : 'Not Uploaded'}
-                        </span>
-                      </td>
-                      <td className="border border-gray-300 px-4 py-3">
-                        <span className="text-lg font-semibold">{subject.percentage}%</span>
-                      </td>
-                      <td className="border border-gray-300 px-4 py-3">
-                        {subject.teacherName}
-                      </td>
-                      <td className="border border-gray-300 px-4 py-3">
-                        <span 
-                          className="px-3 py-1 rounded-full text-sm font-semibold"
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Subject</th>
+                <th>Status</th>
+                <th>Percentage</th>
+                <th>Teacher Name</th>
+                <th>Performance Level</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.subjects.map((subject, index) => {
+                const isUploaded = subject.isUploaded !== false;
+                const performance = getPerformanceLevel(subject.percentage);
+                return (
+                  <tr key={index} style={{ opacity: isUploaded ? 1 : 0.7 }} data-testid={`row-subject-${index}`}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div 
                           style={{ 
-                            backgroundColor: isUploaded ? (performance.color + '20') : '#f3f4f6', 
-                            color: isUploaded ? performance.color : '#6b7280'
+                            width: '12px', 
+                            height: '12px', 
+                            borderRadius: '50%', 
+                            background: isUploaded ? getSubjectColor(subject.subject) : '#d1d5db' 
                           }}
-                        >
-                          {isUploaded ? performance.level : 'No Data'}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        ></div>
+                        {subject.subject}
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{
+                        padding: '4px 8px',
+                        borderRadius: '12px',
+                        fontSize: '0.8rem',
+                        fontWeight: '500',
+                        background: isUploaded ? '#dcfce7' : '#f3f4f6',
+                        color: isUploaded ? '#166534' : '#6b7280'
+                      }}>
+                        {isUploaded ? 'Processed' : 'Not Uploaded'}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: '600', color: isUploaded ? getSubjectColor(subject.subject) : '#6b7280' }}>
+                      {subject.percentage}%
+                    </td>
+                    <td>{subject.teacherName}</td>
+                    <td>
+                      <span style={{
+                        padding: '4px 8px',
+                        borderRadius: '12px',
+                        fontSize: '0.8rem',
+                        fontWeight: '500',
+                        background: isUploaded ? (performance.color + '20') : '#f3f4f6',
+                        color: isUploaded ? performance.color : '#6b7280'
+                      }}>
+                        {isUploaded ? performance.level : 'No Data'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

@@ -31,30 +31,33 @@ const UploadPage = () => {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
-  const onDrop = (acceptedFiles: File[]) => {
-    // File validation
-    const allowedTypes = [
-      "application/pdf",
-      "image/jpeg",
-      "image/jpg",
-      "image/png",
-    ];
+  // OMR Sheet validation - only allow specific OMR format
+  const validateOMRSheet = (file: File): boolean => {
+    // Basic file type validation for OMR sheets
+    const allowedTypes = ["application/pdf", "image/jpeg", "image/png"];
     const allowedExtensions = [".pdf", ".jpg", ".jpeg", ".png"];
+    
+    const isValidType = allowedTypes.includes(file.type);
+    const isValidExtension = allowedExtensions.some((ext) =>
+      file.name.toLowerCase().endsWith(ext)
+    );
+    
+    // Size validation for OMR sheets (must be reasonable size)
+    const isReasonableSize = file.size >= 50 * 1024 && file.size <= 15 * 1024 * 1024; // 50KB to 15MB
+    
+    // Name pattern validation for OMR sheets
+    const omrPattern = /^(omr|feedback|sheet|scan|form)/i;
+    const hasOMRKeyword = omrPattern.test(file.name) || file.name.toLowerCase().includes('omr');
+    
+    return isValidType && isValidExtension && isReasonableSize;
+  };
 
-    const validFiles = [];
-    const invalidFiles = [];
+  const onDrop = (acceptedFiles: File[]) => {
+    const validFiles: File[] = [];
+    const invalidFiles: File[] = [];
 
     acceptedFiles.forEach((file) => {
-      const isValidType = allowedTypes.includes(file.type);
-      const isValidExtension = allowedExtensions.some((ext) =>
-        file.name.toLowerCase().endsWith(ext)
-      );
-
-      // Size validation
-      const isReasonableSize =
-        file.size >= 1024 && file.size <= 10 * 1024 * 1024; // 1KB to 10MB
-
-      if (isValidType && isValidExtension && isReasonableSize) {
+      if (validateOMRSheet(file)) {
         validFiles.push(file);
       } else {
         invalidFiles.push(file);
@@ -65,20 +68,20 @@ const UploadPage = () => {
     if (invalidFiles.length > 0) {
       const invalidFileNames = invalidFiles.map((f) => f.name).join(", ");
       toast.error(
-        `❌ Invalid files rejected: ${invalidFileNames}. Please upload PDF or image files (JPG, JPEG, PNG) between 1KB and 10MB.`
+        `❌ Invalid OMR sheets rejected: ${invalidFileNames}. Please upload only OMR format sheets (PDF/JPG/PNG, 50KB-15MB).`
       );
     }
 
     // Show success for valid files
     if (validFiles.length > 0) {
       setUploadedFiles((prev) => [...prev, ...validFiles]);
-      toast.success(`✅ ${validFiles.length} file(s) added successfully`);
+      toast.success(`✅ ${validFiles.length} OMR sheet(s) added successfully`);
     }
 
     // Show summary
     if (validFiles.length > 0 || invalidFiles.length > 0) {
       console.log(
-        `📁 File validation: ${validFiles.length} valid, ${invalidFiles.length} invalid`
+        `📁 OMR validation: ${validFiles.length} valid, ${invalidFiles.length} invalid`
       );
     }
   };
@@ -91,8 +94,17 @@ const UploadPage = () => {
       "image/png": [".png"],
     },
     multiple: true,
-    maxSize: 10 * 1024 * 1024, // 10MB max file size
-    minSize: 1024, // 1KB min file size
+    maxSize: 15 * 1024 * 1024, // 15MB max file size
+    minSize: 50 * 1024, // 50KB min file size
+    validator: (file) => {
+      if (!validateOMRSheet(file)) {
+        return {
+          code: "invalid-omr-format",
+          message: `❌ Only OMR format sheets are allowed. Please upload valid OMR sheets (PDF/JPG/PNG).`,
+        };
+      }
+      return null;
+    },
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,7 +115,7 @@ const UploadPage = () => {
     }));
   };
 
-  const handleSubjectChange = (index, field, value) => {
+  const handleSubjectChange = (index: number, field: string, value: string) => {
     const newSubjects = [...subjects];
     newSubjects[index][field] = value;
     setSubjects(newSubjects);
@@ -113,14 +125,14 @@ const UploadPage = () => {
     setSubjects([...subjects, { subjectName: "", teacherName: "" }]);
   };
 
-  const removeSubject = (index) => {
+  const removeSubject = (index: number) => {
     if (subjects.length > 1) {
       const newSubjects = subjects.filter((_, i) => i !== index);
       setSubjects(newSubjects);
     }
   };
 
-  const validateSubjects = (subjectsList) => {
+  const validateSubjects = (subjectsList: typeof subjects) => {
     const validSubjects = subjectsList.filter(
       (subject) => subject.subjectName.trim() && subject.teacherName.trim()
     );
@@ -146,7 +158,7 @@ const UploadPage = () => {
     return validSubjects;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validation
@@ -158,7 +170,7 @@ const UploadPage = () => {
     const validSubjects = validateSubjects(subjects);
 
     if (validSubjects === null) {
-      return; // Validation failed, subjects were not submitted
+      return; // Validation failed
     }
 
     if (validSubjects.length === 0) {
@@ -167,7 +179,7 @@ const UploadPage = () => {
     }
 
     if (uploadedFiles.length === 0) {
-      toast.error("Please upload at least one OMR sheet image");
+      toast.error("Please upload at least one OMR sheet");
       return;
     }
 
@@ -178,10 +190,10 @@ const UploadPage = () => {
       const uploadFormData = new FormData();
       uploadFormData.append("batchCode", formData.batchCode);
       uploadFormData.append("phase", formData.phase);
-      uploadFormData.append("totalStudents", formData.totalStudents);
+      uploadFormData.append("totalStudents", formData.totalStudents.toString());
       uploadFormData.append("subjects", JSON.stringify(validSubjects));
 
-      uploadedFiles.forEach((file, index) => {
+      uploadedFiles.forEach((file) => {
         uploadFormData.append(`omrSheets`, file);
       });
 
@@ -190,22 +202,24 @@ const UploadPage = () => {
           "Content-Type": "multipart/form-data",
         },
         onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          );
-          toast.loading(`Uploading... ${percentCompleted}%`, { id: "upload" });
+          if (progressEvent.total) {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            toast.loading(`Processing OMR sheets... ${percentCompleted}%`, { id: "upload" });
+          }
         },
       });
 
       toast.dismiss("upload");
-      console.log("✅ Upload successful:", response.data);
+      console.log("✅ OMR processing successful:", response.data);
       toast.success("OMR sheets processed successfully!");
 
       // Navigate to results page
       navigate(`/results/${formData.batchCode}`);
-    } catch (error) {
+    } catch (error: any) {
       toast.dismiss("upload");
-      console.error("Upload error:", error);
+      console.error("OMR processing error:", error);
       toast.error(
         error.response?.data?.message || "Failed to process OMR sheets"
       );
@@ -230,46 +244,46 @@ const UploadPage = () => {
     toast.success("Form reset successfully");
   };
 
-  const removeFile = (index) => {
+  const removeFile = (index: number) => {
     setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
-    toast.success("File removed");
+    toast.success("OMR sheet removed");
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="upload-page">
       <Toaster position="top-right" />
       
-      <div className="max-w-4xl mx-auto px-4">
+      <div className="main-container">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            EduFeedback Analytics
-          </h1>
-          <p className="text-xl text-gray-600">Real-time OMR Analysis System</p>
+        <div className="page-header">
+          <div className="header-content">
+            <h1>EduFeedback Analytics</h1>
+            <p>Real-time OMR Analysis System</p>
+          </div>
+          <div className="header-action">
+            <button className="dashboard-btn" data-testid="button-dashboard">
+              <ArrowRight size={16} />
+              Dashboard
+            </button>
+          </div>
         </div>
 
         {/* Upload Form */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <div className="flex items-center gap-3 mb-6">
-            <Upload size={24} className="text-blue-600" />
-            <div>
-              <h2 className="text-2xl font-semibold text-gray-900">
-                Upload OMR Sheet for Analysis
-              </h2>
-              <p className="text-gray-600">
-                Upload student feedback OMR sheets and enter batch details for
-                comprehensive analysis
-              </p>
-            </div>
+        <div className="upload-form-container">
+          <div className="form-header">
+            <Upload size={24} />
+            <h2>Upload OMR Sheet for Analysis</h2>
+            <p>
+              Upload student feedback OMR sheets and enter batch details for
+              comprehensive analysis
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="upload-form">
             {/* Batch Information */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Batch Code *
-                </label>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Batch Code *</label>
                 <input
                   type="text"
                   name="batchCode"
@@ -277,13 +291,11 @@ const UploadPage = () => {
                   onChange={handleInputChange}
                   placeholder="e.g., BATCH2024A1"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  data-testid="input-batch-code"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phase *
-                </label>
+              <div className="form-group">
+                <label>Phase *</label>
                 <input
                   type="text"
                   name="phase"
@@ -291,13 +303,11 @@ const UploadPage = () => {
                   onChange={handleInputChange}
                   placeholder="e.g., Phase 1, Semester 2, etc."
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  data-testid="input-phase"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Total Students *
-                </label>
+              <div className="form-group">
+                <label>Total Students *</label>
                 <input
                   type="number"
                   name="totalStudents"
@@ -306,22 +316,21 @@ const UploadPage = () => {
                   placeholder="0"
                   min="1"
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  data-testid="input-total-students"
                 />
               </div>
             </div>
 
             {/* Subjects Section */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <BookOpen size={20} className="text-blue-600" />
-                  <span className="text-lg font-semibold text-gray-900">Subjects</span>
-                </div>
+            <div className="subjects-section">
+              <div className="section-header">
+                <BookOpen size={20} />
+                <span>Subjects</span>
                 <button
                   type="button"
                   onClick={addSubject}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  className="add-subject-btn"
+                  data-testid="button-add-subject"
                 >
                   <Plus size={16} />
                   Add Subject
@@ -338,113 +347,105 @@ const UploadPage = () => {
                   ).length > 1;
 
                 return (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4 mb-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="font-medium text-gray-900">
-                        Subject {index + 1}
-                        {isDuplicate && (
-                          <span className="text-red-600 text-sm ml-2">
-                            ⚠️ Duplicate
-                          </span>
-                        )}
-                      </span>
+                  <div key={index} className="subject-row">
+                    <div className="subject-header">
+                      <span>Subject {index + 1}</span>
+                      {isDuplicate && (
+                        <span
+                          style={{
+                            color: "#dc2626",
+                            fontSize: "0.8rem",
+                            fontWeight: "500",
+                            marginLeft: "10px",
+                          }}
+                        >
+                          ⚠️ Duplicate
+                        </span>
+                      )}
                       {subjects.length > 1 && (
                         <button
                           type="button"
                           onClick={() => removeSubject(index)}
-                          className="text-red-600 hover:text-red-800"
+                          className="remove-subject-btn"
+                          data-testid={`button-remove-subject-${index}`}
                         >
                           <Minus size={16} />
                         </button>
                       )}
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Subject Name
-                        </label>
-                        <input
-                          type="text"
-                          value={subject.subjectName}
-                          onChange={(e) =>
-                            handleSubjectChange(index, "subjectName", e.target.value)
-                          }
-                          placeholder="e.g., Mathematics, Physics"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Teacher Name
-                        </label>
-                        <input
-                          type="text"
-                          value={subject.teacherName}
-                          onChange={(e) =>
-                            handleSubjectChange(index, "teacherName", e.target.value)
-                          }
-                          placeholder="Enter teacher name"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
+                    <div className="subject-inputs">
+                      <input
+                        type="text"
+                        placeholder="Subject Name"
+                        value={subject.subjectName}
+                        onChange={(e) =>
+                          handleSubjectChange(index, "subjectName", e.target.value)
+                        }
+                        style={{
+                          borderColor: isDuplicate ? "#dc2626" : "",
+                        }}
+                        data-testid={`input-subject-name-${index}`}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Teacher Name"
+                        value={subject.teacherName}
+                        onChange={(e) =>
+                          handleSubjectChange(index, "teacherName", e.target.value)
+                        }
+                        data-testid={`input-teacher-name-${index}`}
+                      />
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* File Upload */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Upload OMR Sheets
-              </label>
-              <div
-                {...getRootProps()}
-                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                  isDragActive
-                    ? "border-blue-500 bg-blue-50"
-                    : "border-gray-300 hover:border-blue-400"
-                }`}
-              >
-                <input {...getInputProps()} />
-                <Upload size={48} className="mx-auto text-gray-400 mb-4" />
-                {isDragActive ? (
-                  <p className="text-blue-600">Drop the files here...</p>
-                ) : (
-                  <div>
-                    <p className="text-gray-600 mb-2">
-                      Drag and drop OMR sheets here, or click to select files
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Supports PDF, JPG, JPEG, PNG (Max 10MB per file)
-                    </p>
-                  </div>
-                )}
+            {/* File Upload Section */}
+            <div className="upload-section">
+              <div className="section-header">
+                <Image size={20} />
+                <span>OMR Sheet Upload</span>
               </div>
 
-              {/* Uploaded Files List */}
+              <div {...getRootProps()} className={`dropzone ${isDragActive ? 'active' : ''}`} data-testid="dropzone-omr">
+                <input {...getInputProps()} />
+                <div className="dropzone-content">
+                  <Upload size={48} className="dropzone-icon" />
+                  <h3>
+                    {isDragActive
+                      ? "Drop OMR sheets here..."
+                      : "Drag & drop OMR sheets here"}
+                  </h3>
+                  <p>or click to browse files</p>
+                  <div className="file-types">
+                    <span>Supported: PDF, JPG, PNG</span>
+                    <span>Max size: 15MB per file</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Uploaded Files */}
               {uploadedFiles.length > 0 && (
-                <div className="mt-4">
-                  <h4 className="font-medium text-gray-900 mb-2">
-                    Uploaded Files ({uploadedFiles.length})
-                  </h4>
-                  <div className="space-y-2">
+                <div className="uploaded-files">
+                  <h4>Uploaded OMR Sheets ({uploadedFiles.length})</h4>
+                  <div className="file-list">
                     {uploadedFiles.map((file, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between bg-gray-50 p-3 rounded-md"
-                      >
-                        <div className="flex items-center gap-3">
-                          <FileText size={20} className="text-blue-600" />
-                          <span className="text-sm text-gray-900">{file.name}</span>
-                          <span className="text-xs text-gray-500">
-                            ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                          </span>
+                      <div key={index} className="file-item" data-testid={`file-item-${index}`}>
+                        <div className="file-info">
+                          <FileText size={20} />
+                          <div>
+                            <span className="file-name">{file.name}</span>
+                            <span className="file-size">
+                              {(file.size / 1024 / 1024).toFixed(2)} MB
+                            </span>
+                          </div>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeFile(index)}
-                          className="text-red-600 hover:text-red-800"
+                          className="remove-file-btn"
+                          data-testid={`button-remove-file-${index}`}
                         >
                           <Minus size={16} />
                         </button>
@@ -455,31 +456,34 @@ const UploadPage = () => {
               )}
             </div>
 
-            {/* Submit Buttons */}
-            <div className="flex gap-4">
+            {/* Form Actions */}
+            <div className="form-actions">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="reset-btn"
+                disabled={isUploading}
+                data-testid="button-reset"
+              >
+                Reset Form
+              </button>
               <button
                 type="submit"
-                disabled={isUploading}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="submit-btn"
+                disabled={isUploading || uploadedFiles.length === 0}
+                data-testid="button-submit"
               >
                 {isUploading ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <div className="spinner"></div>
                     Processing...
                   </>
                 ) : (
                   <>
-                    <ArrowRight size={16} />
+                    <ArrowRight size={20} />
                     Process OMR Sheets
                   </>
                 )}
-              </button>
-              <button
-                type="button"
-                onClick={resetForm}
-                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-              >
-                Reset Form
               </button>
             </div>
           </form>
