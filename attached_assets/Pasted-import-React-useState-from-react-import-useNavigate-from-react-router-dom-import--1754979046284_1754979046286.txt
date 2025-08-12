@@ -1,0 +1,594 @@
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useDropzone } from "react-dropzone";
+import axios from "axios";
+import toast from "react-hot-toast";
+import {
+  Upload,
+  FileText,
+  Plus,
+  Minus,
+  ArrowRight,
+  BookOpen,
+  Image,
+} from "lucide-react";
+
+const UploadPage = () => {
+  const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    batchCode: "",
+    phase: "",
+    totalStudents: 0,
+  });
+
+  const [subjects, setSubjects] = useState([
+    { subjectName: "", teacherName: "" },
+    { subjectName: "", teacherName: "" },
+    { subjectName: "", teacherName: "" },
+    { subjectName: "", teacherName: "" },
+  ]);
+
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const onDrop = (acceptedFiles) => {
+    // File validation
+    const allowedTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+    ];
+    const allowedExtensions = [".pdf", ".jpg", ".jpeg", ".png"];
+
+    const validFiles = [];
+    const invalidFiles = [];
+
+    acceptedFiles.forEach((file) => {
+      const isValidType = allowedTypes.includes(file.type);
+      const isValidExtension = allowedExtensions.some((ext) =>
+        file.name.toLowerCase().endsWith(ext)
+      );
+
+      // Size validation
+      const isReasonableSize =
+        file.size >= 1024 && file.size <= 10 * 1024 * 1024; // 1KB to 10MB
+
+      if (isValidType && isValidExtension && isReasonableSize) {
+        validFiles.push(file);
+      } else {
+        invalidFiles.push(file);
+      }
+    });
+
+    // Show detailed error for invalid files
+    if (invalidFiles.length > 0) {
+      const invalidFileNames = invalidFiles.map((f) => f.name).join(", ");
+      toast.error(
+        `❌ Invalid files rejected: ${invalidFileNames}. Please upload PDF or image files (JPG, JPEG, PNG) between 1KB and 10MB.`
+      );
+    }
+
+    // Show success for valid files
+    if (validFiles.length > 0) {
+      setUploadedFiles((prev) => [...prev, ...validFiles]);
+      toast.success(`✅ ${validFiles.length} file(s) added successfully`);
+    }
+
+    // Show summary
+    if (validFiles.length > 0 || invalidFiles.length > 0) {
+      console.log(
+        `📁 File validation: ${validFiles.length} valid, ${invalidFiles.length} invalid`
+      );
+    }
+  };
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      "application/pdf": [".pdf"],
+      "image/jpeg": [".jpg", ".jpeg"],
+      "image/png": [".png"],
+    },
+    multiple: true,
+    maxSize: 10 * 1024 * 1024, // 10MB max file size
+    minSize: 1024, // 1KB min file size
+    validator: (file) => {
+      // File type validation
+      const allowedTypes = [
+        "application/pdf",
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+      ];
+      if (!allowedTypes.includes(file.type)) {
+        return {
+          code: "file-invalid-type",
+          message: `❌ Only PDF and image files (JPG, JPEG, PNG) are allowed.`,
+        };
+      }
+
+      if (file.size < 1024) {
+        return {
+          code: "file-too-small",
+          message: "❌ File too small. Minimum size is 1KB.",
+        };
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        return {
+          code: "file-too-large",
+          message: "File too large. Maximum file size is 10MB.",
+        };
+      }
+
+      return null; // File is valid
+    },
+  });
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleSubjectChange = (index, field, value) => {
+    const newSubjects = [...subjects];
+    newSubjects[index][field] = value;
+    setSubjects(newSubjects);
+  };
+
+  const addSubject = () => {
+    setSubjects([...subjects, { subjectName: "", teacherName: "" }]);
+  };
+
+  const removeSubject = (index) => {
+    if (subjects.length > 1) {
+      const newSubjects = subjects.filter((_, i) => i !== index);
+      setSubjects(newSubjects);
+    }
+  };
+
+  const validateSubjects = (subjectsList) => {
+    const validSubjects = subjectsList.filter(
+      (subject) => subject.subjectName.trim() && subject.teacherName.trim()
+    );
+
+    // Check for duplicate subjects
+    const subjectNames = validSubjects.map((s) =>
+      s.subjectName.toLowerCase().trim()
+    );
+    const uniqueSubjectNames = [...new Set(subjectNames)];
+
+    if (subjectNames.length !== uniqueSubjectNames.length) {
+      const duplicates = subjectNames.filter(
+        (name, index) => subjectNames.indexOf(name) !== index
+      );
+      toast.error(
+        `Duplicate subjects detected: ${[...new Set(duplicates)].join(
+          ", "
+        )}. Please remove duplicates.`
+      );
+      return null;
+    }
+
+    return validSubjects;
+  };
+
+  const getSubjectSuggestions = (input) => {
+    const suggestions = {
+      math: "Mathematics",
+      maths: "Mathematics",
+      mathematics: "Mathematics",
+      computer: "Computer Science",
+      computerscience: "Computer Science",
+      cs: "Computer Science",
+      physics: "Physics",
+      chemistry: "Chemistry",
+      english: "English",
+      social: "Social Studies",
+      language: "Language",
+      mat: "MAT",
+      botany: "Botany",
+      zoology: "Zoology",
+      biology: "Biology",
+      history: "History",
+      geography: "Geography",
+      economics: "Economics",
+    };
+
+    const normalized = input.toLowerCase().trim();
+    return suggestions[normalized] || input;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // Validation
+    if (!formData.batchCode || !formData.phase || !formData.totalStudents) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    const validSubjects = validateSubjects(subjects);
+
+    if (validSubjects === null) {
+      return; // Validation failed, subjects were not submitted
+    }
+
+    if (validSubjects.length === 0) {
+      toast.error("Please add at least one subject with both name and teacher");
+      return;
+    }
+
+    if (uploadedFiles.length === 0) {
+      toast.error("Please upload at least one OMR sheet image");
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      // Create FormData for file upload
+      const uploadFormData = new FormData();
+      uploadFormData.append("batchCode", formData.batchCode);
+      uploadFormData.append("phase", formData.phase);
+      uploadFormData.append("totalStudents", formData.totalStudents);
+      uploadFormData.append("subjects", JSON.stringify(validSubjects));
+
+      uploadedFiles.forEach((file, index) => {
+        uploadFormData.append(`omrSheets`, file);
+      });
+
+      const response = await axios.post("/api/upload-omr", uploadFormData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          toast.loading(`Uploading... ${percentCompleted}%`, { id: "upload" });
+        },
+      });
+
+      toast.dismiss("upload");
+      console.log("✅ Upload successful:", response.data);
+      toast.success("OMR sheets processed successfully!");
+
+      // Navigate to results page
+      navigate(`/results/${formData.batchCode}`);
+    } catch (error) {
+      toast.dismiss("upload");
+      console.error("Upload error:", error);
+      toast.error(
+        error.response?.data?.message || "Failed to process OMR sheets"
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      batchCode: "",
+      phase: "",
+      totalStudents: 0,
+    });
+    setSubjects([
+      { subjectName: "", teacherName: "" },
+      { subjectName: "", teacherName: "" },
+      { subjectName: "", teacherName: "" },
+      { subjectName: "", teacherName: "" },
+    ]);
+    setUploadedFiles([]);
+    toast.success("Form reset successfully");
+  };
+
+  const removeFile = (index) => {
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+    toast.success("File removed");
+  };
+
+  return (
+    <div className="upload-page">
+      {/* Header with development notice */}
+      <div className="dev-notice">
+        <span>
+          This is a temporary development preview, and these links are not for
+          public use. Deploy your app for secure sharing or use an invite link.
+        </span>
+        <button className="close-notice">×</button>
+      </div>
+
+      <div className="main-container">
+        {/* Header */}
+        <div className="page-header">
+          <div className="header-content">
+            <h1>EduFeedback Analytics</h1>
+            <p>Real-time OMR Analysis System</p>
+          </div>
+          <div className="header-action">
+            <button className="dashboard-btn">
+              <ArrowRight size={16} />
+              Dashboard
+            </button>
+          </div>
+        </div>
+
+        {/* Upload Form */}
+        <div className="upload-form-container">
+          <div className="form-header">
+            <Upload size={24} />
+            <h2>Upload OMR Sheet for Analysis</h2>
+            <p>
+              Upload student feedback OMR sheets and enter batch details for
+              comprehensive analysis
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="upload-form">
+            {/* Batch Information */}
+            <div className="form-row">
+              <div className="form-group">
+                <label>Batch Code *</label>
+                <input
+                  type="text"
+                  name="batchCode"
+                  value={formData.batchCode}
+                  onChange={handleInputChange}
+                  placeholder="e.g., BATCH2024A1"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Phase *</label>
+                <input
+                  type="text"
+                  name="phase"
+                  value={formData.phase}
+                  onChange={handleInputChange}
+                  placeholder="e.g., Phase 1, Semester 2, etc."
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Total Students *</label>
+                <input
+                  type="number"
+                  name="totalStudents"
+                  value={formData.totalStudents}
+                  onChange={handleInputChange}
+                  placeholder="0"
+                  min="1"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Subjects Section */}
+            <div className="subjects-section">
+              <div className="section-header">
+                <BookOpen size={20} />
+                <span>Subjects</span>
+                <button
+                  type="button"
+                  onClick={addSubject}
+                  className="add-subject-btn"
+                >
+                  <Plus size={16} />
+                  Add Subject
+                </button>
+              </div>
+
+              {subjects.map((subject, index) => {
+                const isDuplicate =
+                  subjects.filter(
+                    (s, i) =>
+                      s.subjectName.toLowerCase().trim() ===
+                        subject.subjectName.toLowerCase().trim() &&
+                      s.subjectName.trim() !== ""
+                  ).length > 1;
+
+                return (
+                  <div key={index} className="subject-row">
+                    <div className="subject-header">
+                      <span>Subject {index + 1}</span>
+                      {isDuplicate && (
+                        <span
+                          style={{
+                            color: "#dc2626",
+                            fontSize: "0.8rem",
+                            fontWeight: "500",
+                            marginLeft: "10px",
+                          }}
+                        >
+                          ⚠️ Duplicate
+                        </span>
+                      )}
+                      {subjects.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeSubject(index)}
+                          className="remove-subject-btn"
+                        >
+                          <Minus size={16} />
+                        </button>
+                      )}
+                    </div>
+                    <div className="subject-inputs">
+                      <div className="form-group">
+                        <label>Subject Name *</label>
+                        <input
+                          type="text"
+                          value={subject.subjectName}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const normalized = getSubjectSuggestions(value);
+                            handleSubjectChange(
+                              index,
+                              "subjectName",
+                              normalized
+                            );
+                          }}
+                          placeholder="e.g., Physics, Chemistry, Mathematics"
+                          style={{
+                            borderColor: isDuplicate ? "#dc2626" : undefined,
+                            backgroundColor: isDuplicate
+                              ? "#fef2f2"
+                              : undefined,
+                          }}
+                        />
+                        {subject.subjectName &&
+                          subject.subjectName !==
+                            getSubjectSuggestions(subject.subjectName) && (
+                            <small
+                              style={{
+                                color: "#059669",
+                                fontSize: "0.8rem",
+                                marginTop: "4px",
+                                display: "block",
+                              }}
+                            >
+                              💡 Suggestion:{" "}
+                              {getSubjectSuggestions(subject.subjectName)}
+                            </small>
+                          )}
+                      </div>
+                      <div className="form-group">
+                        <label>Teacher Name *</label>
+                        <input
+                          type="text"
+                          value={subject.teacherName}
+                          onChange={(e) =>
+                            handleSubjectChange(
+                              index,
+                              "teacherName",
+                              e.target.value
+                            )
+                          }
+                          placeholder="e.g., Dr. Smith, Prof. Johnson"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* OMR Sheet Upload */}
+            <div className="upload-section">
+              <div className="section-header">
+                <Image size={20} />
+                <span>OMR Sheet Upload</span>
+              </div>
+
+              <div
+                {...getRootProps()}
+                className={`dropzone ${isDragActive ? "active" : ""}`}
+              >
+                <input {...getInputProps()} />
+                <div className="dropzone-content">
+                  <Upload size={48} />
+                  <h3>Upload OMR Sheet</h3>
+                  <p>
+                    Drag and drop your OMR sheet files here, or click to browse
+                  </p>
+                  <p className="file-info">
+                    Accepted formats: PDF, JPG, JPEG, PNG • Size: 1KB - 10MB
+                  </p>
+                </div>
+              </div>
+
+              {uploadedFiles.length > 0 && (
+                <div className="uploaded-files">
+                  <h4>Uploaded Files ({uploadedFiles.length}):</h4>
+                  {uploadedFiles.map((file, index) => (
+                    <div key={index} className="file-item">
+                      <span className="file-name">{file.name}</span>
+                      <span className="file-size">
+                        ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(index)}
+                        className="remove-file-btn"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* OMR Guidelines */}
+              {/* <div className="guidelines">
+                <div className="guidelines-header">
+                  <FileText size={16} />
+                  <span>OMR Sheet Requirements & Guidelines:</span>
+                </div>
+                <ul>
+                  <li><strong>📁 File Requirements:</strong></li>
+                  <li>• <strong>Allowed formats:</strong> PDF OMR sheets only</li>
+                  <li>• <strong>File size:</strong> 1KB - 10MB per file</li>
+                  <li>• <strong>Content:</strong> Must be actual OMR sheets in PDF format</li>
+                  <li><strong>❌ NOT ALLOWED:</strong></li>
+                  <li>• Regular images (JPG, PNG, JPEG)</li>
+                  <li>• Videos (MP4, AVI, MOV, etc.)</li>
+                  <li>• Documents (DOC, DOCX, TXT)</li>
+                  <li>• Screenshots or photos of OMR sheets</li>
+                  <li><strong>📝 OMR Sheet Guidelines:</strong></li>
+                  <li>• Each subject should have 20 questions marked clearly</li>
+                  <li>• <strong>✅ ANY MARKING STYLE IS ACCEPTED:</strong></li>
+                  <li>• • <strong>Ticks (✓)</strong> - any style of tick marks</li>
+                  <li>• • <strong>Crosses (✗)</strong> - any style of cross marks</li>
+                  <li>• • <strong>Filled circles (●)</strong> - any filled shape</li>
+                  <li>• • <strong>Filled squares (■)</strong> - any filled shape</li>
+                  <li>• • <strong>Shaded areas</strong> - any type of shading</li>
+                  <li>• • <strong>Underlines</strong> - any line marking</li>
+                  <li>• • <strong>Any other marking style</strong> - be creative!</li>
+                  <li>• <strong>🎯 Rating System:</strong></li>
+                  <li>• • <strong>Excellent</strong> - Best performance (5 points)</li>
+                  <li>• • <strong>Good</strong> - Average performance (3 points)</li>
+                  <li>• • <strong>Poor</strong> - Needs improvement (1 point)</li>
+                  <li>• Ensure good lighting and minimal shadows for best results</li>
+                  <li>• Marks should be clear and dark enough for accurate detection</li>
+                  <li><strong>💡 Tip:</strong> Convert images to PDF format before uploading</li>
+                  <li><strong>✨ Freedom:</strong> Students can mark answers in any way they prefer!</li>
+                </ul>
+              </div> */}
+            </div>
+
+            {/* Form Actions */}
+            <div className="form-actions">
+              <button type="button" onClick={resetForm} className="reset-btn">
+                Reset Form
+              </button>
+              <button
+                type="submit"
+                className="submit-btn"
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <>
+                    <div className="spinner"></div>
+                    Processing OMR Sheets...
+                  </>
+                ) : (
+                  <>
+                    <Upload size={20} />
+                    Upload & Analyze
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default UploadPage;
