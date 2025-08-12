@@ -1,268 +1,492 @@
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
-import { FileUpload } from "@/components/file-upload";
-import { ProcessingStatus } from "@/components/processing-status";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import { CloudUpload, FileText, Users, CheckCircle } from "lucide-react";
+import React, { useState } from "react";
+import { useLocation } from "wouter";
+import { useDropzone } from "react-dropzone";
+import axios from "axios";
+import toast, { Toaster } from "react-hot-toast";
+import {
+  Upload,
+  FileText,
+  Plus,
+  Minus,
+  ArrowRight,
+  BookOpen,
+  Image,
+} from "lucide-react";
 
-export default function UploadPage() {
-  const [batchCode, setBatchCode] = useState("");
-  const [batchName, setBatchName] = useState("");
-  const [batchDescription, setBatchDescription] = useState("");
+const UploadPage = () => {
+  const [, navigate] = useLocation();
+  const [formData, setFormData] = useState({
+    batchCode: "",
+    phase: "",
+    totalStudents: 0,
+  });
+
+  const [subjects, setSubjects] = useState([
+    { subjectName: "", teacherName: "" },
+    { subjectName: "", teacherName: "" },
+    { subjectName: "", teacherName: "" },
+    { subjectName: "", teacherName: "" },
+  ]);
+
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingBatch, setProcessingBatch] = useState<string | null>(null);
-  const { toast } = useToast();
+  const [isUploading, setIsUploading] = useState(false);
 
-  // Generate random batch code
-  const generateBatchCode = () => {
-    const code = `OMR-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
-    setBatchCode(code);
-    setBatchName(`Batch ${code}`);
-  };
+  const onDrop = (acceptedFiles: File[]) => {
+    // File validation
+    const allowedTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+    ];
+    const allowedExtensions = [".pdf", ".jpg", ".jpeg", ".png"];
 
-  // Upload mutation
-  const uploadMutation = useMutation({
-    mutationFn: async (data: { files: File[]; batchCode: string }) => {
-      const formData = new FormData();
-      data.files.forEach(file => formData.append('files', file));
-      
-      const response = await apiRequest('POST', `/api/upload/${data.batchCode}`, formData);
-      return response.json();
-    },
-    onSuccess: (data) => {
-      toast({
-        title: "Upload Successful",
-        description: `${data.sheets.length} files uploaded and processing started`,
-      });
-      setIsProcessing(true);
-      setProcessingBatch(data.batch.batchCode);
-      setUploadedFiles([]);
-      queryClient.invalidateQueries({ queryKey: ['/api/batches'] });
-    },
-    onError: () => {
-      toast({
-        title: "Upload Failed",
-        description: "Failed to upload files. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
+    const validFiles = [];
+    const invalidFiles = [];
 
-  // Processing status query
-  const { data: processingStatus } = useQuery({
-    queryKey: ['/api/processing-status', processingBatch],
-    enabled: !!processingBatch && isProcessing,
-    refetchInterval: 2000,
-  });
+    acceptedFiles.forEach((file) => {
+      const isValidType = allowedTypes.includes(file.type);
+      const isValidExtension = allowedExtensions.some((ext) =>
+        file.name.toLowerCase().endsWith(ext)
+      );
 
-  // Stop polling when processing is complete
-  if (processingStatus?.isComplete && isProcessing) {
-    setIsProcessing(false);
-    toast({
-      title: "Processing Complete",
-      description: `All ${processingStatus.totalSheets} sheets have been processed`,
+      // Size validation
+      const isReasonableSize =
+        file.size >= 1024 && file.size <= 10 * 1024 * 1024; // 1KB to 10MB
+
+      if (isValidType && isValidExtension && isReasonableSize) {
+        validFiles.push(file);
+      } else {
+        invalidFiles.push(file);
+      }
     });
-  }
 
-  const handleFilesSelected = (files: File[]) => {
-    setUploadedFiles(files);
-    if (!batchCode) {
-      generateBatchCode();
+    // Show detailed error for invalid files
+    if (invalidFiles.length > 0) {
+      const invalidFileNames = invalidFiles.map((f) => f.name).join(", ");
+      toast.error(
+        `❌ Invalid files rejected: ${invalidFileNames}. Please upload PDF or image files (JPG, JPEG, PNG) between 1KB and 10MB.`
+      );
+    }
+
+    // Show success for valid files
+    if (validFiles.length > 0) {
+      setUploadedFiles((prev) => [...prev, ...validFiles]);
+      toast.success(`✅ ${validFiles.length} file(s) added successfully`);
+    }
+
+    // Show summary
+    if (validFiles.length > 0 || invalidFiles.length > 0) {
+      console.log(
+        `📁 File validation: ${validFiles.length} valid, ${invalidFiles.length} invalid`
+      );
     }
   };
 
-  const handleUpload = () => {
-    if (!batchCode || uploadedFiles.length === 0) {
-      toast({
-        title: "Missing Information",
-        description: "Please provide a batch code and select files to upload",
-        variant: "destructive",
-      });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      "application/pdf": [".pdf"],
+      "image/jpeg": [".jpg", ".jpeg"],
+      "image/png": [".png"],
+    },
+    multiple: true,
+    maxSize: 10 * 1024 * 1024, // 10MB max file size
+    minSize: 1024, // 1KB min file size
+  });
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleSubjectChange = (index, field, value) => {
+    const newSubjects = [...subjects];
+    newSubjects[index][field] = value;
+    setSubjects(newSubjects);
+  };
+
+  const addSubject = () => {
+    setSubjects([...subjects, { subjectName: "", teacherName: "" }]);
+  };
+
+  const removeSubject = (index) => {
+    if (subjects.length > 1) {
+      const newSubjects = subjects.filter((_, i) => i !== index);
+      setSubjects(newSubjects);
+    }
+  };
+
+  const validateSubjects = (subjectsList) => {
+    const validSubjects = subjectsList.filter(
+      (subject) => subject.subjectName.trim() && subject.teacherName.trim()
+    );
+
+    // Check for duplicate subjects
+    const subjectNames = validSubjects.map((s) =>
+      s.subjectName.toLowerCase().trim()
+    );
+    const uniqueSubjectNames = [...new Set(subjectNames)];
+
+    if (subjectNames.length !== uniqueSubjectNames.length) {
+      const duplicates = subjectNames.filter(
+        (name, index) => subjectNames.indexOf(name) !== index
+      );
+      toast.error(
+        `Duplicate subjects detected: ${[...new Set(duplicates)].join(
+          ", "
+        )}. Please remove duplicates.`
+      );
+      return null;
+    }
+
+    return validSubjects;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // Validation
+    if (!formData.batchCode || !formData.phase || !formData.totalStudents) {
+      toast.error("Please fill in all required fields");
       return;
     }
 
-    uploadMutation.mutate({ files: uploadedFiles, batchCode });
+    const validSubjects = validateSubjects(subjects);
+
+    if (validSubjects === null) {
+      return; // Validation failed, subjects were not submitted
+    }
+
+    if (validSubjects.length === 0) {
+      toast.error("Please add at least one subject with both name and teacher");
+      return;
+    }
+
+    if (uploadedFiles.length === 0) {
+      toast.error("Please upload at least one OMR sheet image");
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      // Create FormData for file upload
+      const uploadFormData = new FormData();
+      uploadFormData.append("batchCode", formData.batchCode);
+      uploadFormData.append("phase", formData.phase);
+      uploadFormData.append("totalStudents", formData.totalStudents);
+      uploadFormData.append("subjects", JSON.stringify(validSubjects));
+
+      uploadedFiles.forEach((file, index) => {
+        uploadFormData.append(`omrSheets`, file);
+      });
+
+      const response = await axios.post("http://localhost:5001/api/upload-omr", uploadFormData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          toast.loading(`Uploading... ${percentCompleted}%`, { id: "upload" });
+        },
+      });
+
+      toast.dismiss("upload");
+      console.log("✅ Upload successful:", response.data);
+      toast.success("OMR sheets processed successfully!");
+
+      // Navigate to results page
+      navigate(`/results/${formData.batchCode}`);
+    } catch (error) {
+      toast.dismiss("upload");
+      console.error("Upload error:", error);
+      toast.error(
+        error.response?.data?.message || "Failed to process OMR sheets"
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      batchCode: "",
+      phase: "",
+      totalStudents: 0,
+    });
+    setSubjects([
+      { subjectName: "", teacherName: "" },
+      { subjectName: "", teacherName: "" },
+      { subjectName: "", teacherName: "" },
+      { subjectName: "", teacherName: "" },
+    ]);
+    setUploadedFiles([]);
+    toast.success("Form reset successfully");
+  };
+
+  const removeFile = (index) => {
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+    toast.success("File removed");
   };
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="text-center space-y-4">
-        <div className="mx-auto w-16 h-16 bg-primary-light bg-opacity-10 rounded-full flex items-center justify-center">
-          <CloudUpload className="h-8 w-8 text-primary" />
+    <div className="min-h-screen bg-gray-50 py-8">
+      <Toaster position="top-right" />
+      
+      <div className="max-w-4xl mx-auto px-4">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            EduFeedback Analytics
+          </h1>
+          <p className="text-xl text-gray-600">Real-time OMR Analysis System</p>
         </div>
-        <div>
-          <h1 className="text-3xl font-medium text-text-primary mb-2">Upload OMR Sheets</h1>
-          <p className="text-text-secondary">Upload student feedback OMR sheets for automated scanning and analysis</p>
-        </div>
-      </div>
 
-      {/* Batch Information */}
-      <Card className="shadow-material-2">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Batch Information
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="batchCode">Batch Code *</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="batchCode"
-                  value={batchCode}
-                  onChange={(e) => setBatchCode(e.target.value)}
-                  placeholder="e.g., OMR-2024-001"
-                  data-testid="input-batch-code"
+        {/* Upload Form */}
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="flex items-center gap-3 mb-6">
+            <Upload size={24} className="text-blue-600" />
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900">
+                Upload OMR Sheet for Analysis
+              </h2>
+              <p className="text-gray-600">
+                Upload student feedback OMR sheets and enter batch details for
+                comprehensive analysis
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Batch Information */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Batch Code *
+                </label>
+                <input
+                  type="text"
+                  name="batchCode"
+                  value={formData.batchCode}
+                  onChange={handleInputChange}
+                  placeholder="e.g., BATCH2024A1"
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <Button 
-                  variant="outline" 
-                  onClick={generateBatchCode}
-                  data-testid="button-generate-batch-code"
-                >
-                  Generate
-                </Button>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Phase *
+                </label>
+                <input
+                  type="text"
+                  name="phase"
+                  value={formData.phase}
+                  onChange={handleInputChange}
+                  placeholder="e.g., Phase 1, Semester 2, etc."
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Total Students *
+                </label>
+                <input
+                  type="number"
+                  name="totalStudents"
+                  value={formData.totalStudents}
+                  onChange={handleInputChange}
+                  placeholder="0"
+                  min="1"
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="batchName">Batch Name</Label>
-              <Input
-                id="batchName"
-                value={batchName}
-                onChange={(e) => setBatchName(e.target.value)}
-                placeholder="e.g., Mid-term Feedback 2024"
-                data-testid="input-batch-name"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="batchDescription">Description (Optional)</Label>
-            <Textarea
-              id="batchDescription"
-              value={batchDescription}
-              onChange={(e) => setBatchDescription(e.target.value)}
-              placeholder="Add any additional notes about this batch..."
-              rows={3}
-              data-testid="textarea-batch-description"
-            />
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* File Upload */}
-      <Card className="shadow-material-2">
-        <CardContent className="p-8">
-          <FileUpload onFilesSelected={handleFilesSelected} />
-        </CardContent>
-      </Card>
+            {/* Subjects Section */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <BookOpen size={20} className="text-blue-600" />
+                  <span className="text-lg font-semibold text-gray-900">Subjects</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={addSubject}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  <Plus size={16} />
+                  Add Subject
+                </button>
+              </div>
 
-      {/* Upload Queue */}
-      {uploadedFiles.length > 0 && (
-        <Card className="shadow-material-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Upload Queue ({uploadedFiles.length} files)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {uploadedFiles.map((file, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary-light bg-opacity-10 rounded-lg flex items-center justify-center">
-                      <FileText className="h-5 w-5 text-primary" />
+              {subjects.map((subject, index) => {
+                const isDuplicate =
+                  subjects.filter(
+                    (s, i) =>
+                      s.subjectName.toLowerCase().trim() ===
+                        subject.subjectName.toLowerCase().trim() &&
+                      s.subjectName.trim() !== ""
+                  ).length > 1;
+
+                return (
+                  <div key={index} className="border border-gray-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-medium text-gray-900">
+                        Subject {index + 1}
+                        {isDuplicate && (
+                          <span className="text-red-600 text-sm ml-2">
+                            ⚠️ Duplicate
+                          </span>
+                        )}
+                      </span>
+                      {subjects.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeSubject(index)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          <Minus size={16} />
+                        </button>
+                      )}
                     </div>
-                    <div>
-                      <p className="font-medium text-text-primary">{file.name}</p>
-                      <p className="text-sm text-text-secondary">
-                        {(file.size / 1024 / 1024).toFixed(2)} MB
-                      </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Subject Name
+                        </label>
+                        <input
+                          type="text"
+                          value={subject.subjectName}
+                          onChange={(e) =>
+                            handleSubjectChange(index, "subjectName", e.target.value)
+                          }
+                          placeholder="e.g., Mathematics, Physics"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Teacher Name
+                        </label>
+                        <input
+                          type="text"
+                          value={subject.teacherName}
+                          onChange={(e) =>
+                            handleSubjectChange(index, "teacherName", e.target.value)
+                          }
+                          placeholder="Enter teacher name"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
                     </div>
                   </div>
-                  <Badge variant="outline">Ready</Badge>
-                </div>
-              ))}
+                );
+              })}
             </div>
-            
-            <div className="mt-6 flex justify-center">
-              <Button
-                onClick={handleUpload}
-                disabled={uploadMutation.isPending}
-                className="bg-primary hover:bg-primary-dark"
-                data-testid="button-upload-start"
+
+            {/* File Upload */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Upload OMR Sheets
+              </label>
+              <div
+                {...getRootProps()}
+                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                  isDragActive
+                    ? "border-blue-500 bg-blue-50"
+                    : "border-gray-300 hover:border-blue-400"
+                }`}
               >
-                {uploadMutation.isPending ? (
+                <input {...getInputProps()} />
+                <Upload size={48} className="mx-auto text-gray-400 mb-4" />
+                {isDragActive ? (
+                  <p className="text-blue-600">Drop the files here...</p>
+                ) : (
+                  <div>
+                    <p className="text-gray-600 mb-2">
+                      Drag and drop OMR sheets here, or click to select files
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Supports PDF, JPG, JPEG, PNG (Max 10MB per file)
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Uploaded Files List */}
+              {uploadedFiles.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="font-medium text-gray-900 mb-2">
+                    Uploaded Files ({uploadedFiles.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {uploadedFiles.map((file, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between bg-gray-50 p-3 rounded-md"
+                      >
+                        <div className="flex items-center gap-3">
+                          <FileText size={20} className="text-blue-600" />
+                          <span className="text-sm text-gray-900">{file.name}</span>
+                          <span className="text-xs text-gray-500">
+                            ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeFile(index)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          <Minus size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Submit Buttons */}
+            <div className="flex gap-4">
+              <button
+                type="submit"
+                disabled={isUploading}
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isUploading ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                    Uploading...
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Processing...
                   </>
                 ) : (
                   <>
-                    <CloudUpload className="h-4 w-4 mr-2" />
-                    Start Upload & Processing
+                    <ArrowRight size={16} />
+                    Process OMR Sheets
                   </>
                 )}
-              </Button>
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+              >
+                Reset Form
+              </button>
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Processing Status */}
-      {isProcessing && processingBatch && (
-        <ProcessingStatus batchCode={processingBatch} />
-      )}
-
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="shadow-material-2">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-text-secondary text-sm font-medium">Supported Formats</p>
-                <p className="text-2xl font-bold text-text-primary">JPG, PNG, PDF</p>
-              </div>
-              <FileText className="h-8 w-8 text-primary" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-material-2">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-text-secondary text-sm font-medium">Max File Size</p>
-                <p className="text-2xl font-bold text-text-primary">10 MB</p>
-              </div>
-              <CloudUpload className="h-8 w-8 text-primary" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-material-2">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-text-secondary text-sm font-medium">Processing Speed</p>
-                <p className="text-2xl font-bold text-text-primary">~2-5 sec</p>
-              </div>
-              <CheckCircle className="h-8 w-8 text-success" />
-            </div>
-          </CardContent>
-        </Card>
+          </form>
+        </div>
       </div>
     </div>
   );
-}
+};
+
+export default UploadPage;
