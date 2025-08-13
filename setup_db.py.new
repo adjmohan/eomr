@@ -1,0 +1,67 @@
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
+def setup_database():
+    # Database connection parameters
+    db_params = {
+        'host': 'localhost',
+        'database': 'postgres',  # Connect to default database first
+        'user': 'postgres',
+        'password': 'root'  # Update this to match your PostgreSQL password
+    }
+
+    try:
+        # Connect to default database
+        conn = psycopg2.connect(**db_params)
+        conn.autocommit = True
+        cursor = conn.cursor()
+
+        # Create omrscan database if it doesn't exist
+        cursor.execute("SELECT 1 FROM pg_catalog.pg_database WHERE datname = 'omrscan'")
+        exists = cursor.fetchone()
+        if not exists:
+            cursor.execute('CREATE DATABASE omrscan')
+
+        cursor.close()
+        conn.close()
+
+        # Connect to omrscan database
+        db_params['database'] = 'omrscan'
+        conn = psycopg2.connect(**db_params)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Create tables
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS batches (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                status VARCHAR(50) DEFAULT 'pending',
+                total_sheets INTEGER DEFAULT 0,
+                processed_sheets INTEGER DEFAULT 0
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sheets (
+                id SERIAL PRIMARY KEY,
+                batch_id INTEGER REFERENCES batches(id),
+                file_path VARCHAR(255) NOT NULL,
+                status VARCHAR(50) DEFAULT 'pending',
+                results JSONB,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        print("Database and tables created successfully!")
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    finally:
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        if 'conn' in locals() and conn:
+            conn.close()
+
+if __name__ == "__main__":
+    setup_database()

@@ -3,7 +3,7 @@ import json
 import cv2
 import numpy as np
 from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 from PIL import Image
 import pdf2image
 import psycopg2
@@ -14,13 +14,23 @@ import base64
 from werkzeug.utils import secure_filename
 import tempfile
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:5173"],  # Add your frontend URL
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 # Configuration
 UPLOAD_FOLDER = 'uploads'
@@ -36,16 +46,29 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # Database connection
 def get_db_connection():
     try:
-        conn = psycopg2.connect(
-            host=os.getenv('PGHOST'),
-            database=os.getenv('PGDATABASE'),
-            user=os.getenv('PGUSER'),
-            password=os.getenv('PGPASSWORD'),
-            port=os.getenv('PGPORT')
-        )
+        # Get database config from environment variables
+        db_config = {
+            'host': os.getenv('PGHOST', 'localhost'),
+            'database': os.getenv('PGDATABASE', 'omrscan'),
+            'user': os.getenv('PGUSER', 'postgres'),
+            'password': os.getenv('PGPASSWORD', 'root'),
+            'port': os.getenv('PGPORT', '5432')
+        }
+        
+        # Log connection attempt (without password)
+        log_config = db_config.copy()
+        log_config.pop('password')
+        logger.info(f"Attempting database connection with config: {log_config}")
+        
+        conn = psycopg2.connect(**db_config)
+        logger.info("Database connection successful")
         return conn
+        
+    except psycopg2.Error as e:
+        logger.error(f"PostgreSQL Error: {e.diag.message_primary if hasattr(e, 'diag') else str(e)}")
+        return None
     except Exception as e:
-        logger.error(f"Database connection error: {e}")
+        logger.error(f"Unexpected error in database connection: {str(e)}")
         return None
 
 def allowed_file(filename):
@@ -294,7 +317,7 @@ def upload_omr():
             try:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    INSERT INTO result (batch_code, phase, total_students, subjects)
+                    INSERT INTO result (batch_code, phase, total_students, subjects,percentage,remarks)
                     VALUES (%s, %s, %s, %s)
                     ON CONFLICT (batch_code) DO UPDATE SET
                     phase = EXCLUDED.phase,
@@ -327,9 +350,11 @@ def upload_omr():
 @app.route('/api/results/<batch_code>', methods=['GET'])
 def get_results(batch_code):
     try:
+        logger.info(f"Fetching results for batch code: {batch_code}")
         conn = get_db_connection()
         if not conn:
-            return jsonify({'error': 'Database connection failed'}), 500
+            logger.error("Database connection failed")
+            return jsonify({'error': 'Database connection failed', 'details': 'Could not establish database connection'}), 500
         
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute("""
@@ -340,19 +365,21 @@ def get_results(batch_code):
         
         result = cursor.fetchone()
         cursor.close()
-        conn.close()
         
         if not result:
-            return jsonify({'error': 'Batch not found'}), 404
+            logger.info(f"No results found for batch code: {batch_code}")
+            return jsonify({'error': 'Batch not found', 'message': f'No results found for batch code {batch_code}'}), 404
         
-        return jsonify({
+        # Convert the results to JSON-safe format
+        response_data = {
             'batchCode': result['batch_code'],
             'phase': result['phase'],
             'totalStudents': result['total_students'],
             'subjects': result['subjects'],
             'createdAt': result['created_at'].isoformat(),
             'dataSource': 'database'
-        })
+        }
+        return jsonify(response_data)
         
     except Exception as e:
         logger.error(f"Error fetching results: {e}")
@@ -422,6 +449,81 @@ def health_check():
             'error': str(e),
             'timestamp': datetime.now().isoformat()
         }), 500
+
+@app.route('/api/batches', methods=['POST'])
+def create_batch():
+    try:
+        data = request.get_json()
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("""
+            INSERT INTO result (batch_code, phase, total_students, subjects)
+            VALUES (%s, %s, %s, %s)
+            RETURNING *
+        """, (data['batchCode'], data['description'], data['totalStudents'], json.dumps(data['subjects'])))
+        
+        result = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify(result), 201
+    except Exception as e:
+        logger.error(f"Error creating batch: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/upload/<batch_code>', methods=['POST'])
+def upload_files(batch_code):
+    try:
+        if 'files' not in request.files:
+            return jsonify({'error': 'No files uploaded'}), 400
+
+        files = request.files.getlist('files')
+        if not files:
+            return jsonify({'error': 'No files selected'}), 400
+
+        uploaded_files = []
+        for file in files:
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(filepath)
+                
+                uploaded_files.append({
+                    'filename': filename,
+                    'filepath': filepath
+                })
+
+                # Process OMR in background
+                processor = OMRProcessor()
+                results = processor.process_image(filepath)  # You'll need to implement this method
+                
+                # Store results in database
+                conn = get_db_connection()
+                if conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        UPDATE result 
+                        SET subjects = subjects || jsonb_build_object('results', %s::jsonb) 
+                        WHERE batch_code = %s
+                    """, (json.dumps([{'filename': filename, 'results': results}]), batch_code))
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+
+        return jsonify({
+            'message': f'Successfully uploaded {len(uploaded_files)} files',
+            'files': uploaded_files
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=True)

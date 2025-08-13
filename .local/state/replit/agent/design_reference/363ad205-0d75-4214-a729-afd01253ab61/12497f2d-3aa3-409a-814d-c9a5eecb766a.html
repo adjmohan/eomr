@@ -1,0 +1,956 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMR Scan Pro - Student Feedback System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1976D2',
+                        'primary-light': '#42A5F5',
+                        'primary-dark': '#1565C0',
+                        secondary: '#388E3C',
+                        'secondary-light': '#66BB6A',
+                        accent: '#FF9800',
+                        error: '#D32F2F',
+                        success: '#4CAF50',
+                        warning: '#FF9800',
+                        'surface': '#FFFFFF',
+                        'background': '#FAFAFA',
+                        'text-primary': '#212121',
+                        'text-secondary': '#757575'
+                    },
+                    fontFamily: {
+                        'roboto': ['Roboto', 'sans-serif']
+                    },
+                    boxShadow: {
+                        'material-1': '0 2px 1px -1px rgba(0,0,0,0.2), 0 1px 1px 0 rgba(0,0,0,0.14), 0 1px 3px 0 rgba(0,0,0,0.12)',
+                        'material-2': '0 3px 1px -2px rgba(0,0,0,0.2), 0 2px 2px 0 rgba(0,0,0,0.14), 0 1px 5px 0 rgba(0,0,0,0.12)',
+                        'material-4': '0 2px 4px -1px rgba(0,0,0,0.2), 0 4px 5px 0 rgba(0,0,0,0.14), 0 1px 10px 0 rgba(0,0,0,0.12)'
+                    }
+                }
+            }
+        };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="font-roboto bg-background text-text-primary">
+
+    <!-- @COMPONENT: Navigation -->
+    <nav class="bg-surface shadow-material-2 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="flex items-center">
+                            <i class="fas fa-scan-document text-2xl text-primary mr-3"></i>
+                            <h1 class="text-xl font-medium text-text-primary">OMR Scan Pro</h1>
+                        </div>
+                    </div>
+                    <div class="hidden md:block ml-10">
+                        <div class="flex items-baseline space-x-4">
+                            <a href="#upload" class="text-primary px-3 py-2 rounded-md text-sm font-medium border-b-2 border-primary" data-tab="upload">Upload</a>
+                            <a href="#results" class="text-text-secondary hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors" data-tab="results">Results</a>
+                            <a href="#dashboard" class="text-text-secondary hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors" data-tab="dashboard">Dashboard</a>
+                            <a href="#admin" class="text-text-secondary hover:text-primary px-3 py-2 rounded-md text-sm font-medium transition-colors" data-tab="admin">Admin</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-4 flex items-center md:ml-6">
+                        <button class="p-2 rounded-full text-text-secondary hover:text-primary hover:bg-gray-100 transition-colors">
+                            <i class="fas fa-bell text-lg"></i>
+                        </button>
+                        <div class="ml-3 relative">
+                            <button class="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                                <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center">
+                                    <i class="fas fa-user text-sm"></i>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <!-- @END_COMPONENT: Navigation -->
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- @COMPONENT: UploadSection -->
+        <div id="upload-section" class="tab-content">
+            <div class="mb-8">
+                <h2 class="text-3xl font-medium text-text-primary mb-2">Upload OMR Sheets</h2>
+                <p class="text-text-secondary">Upload student feedback OMR sheets for automated scanning and analysis</p>
+            </div>
+
+            <!-- Upload Area -->
+            <div class="bg-surface rounded-lg shadow-material-2 p-8 mb-8">
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-primary transition-colors" id="dropZone">
+                    <div class="mx-auto w-16 h-16 bg-primary-light bg-opacity-10 rounded-full flex items-center justify-center mb-4">
+                        <i class="fas fa-cloud-upload-alt text-2xl text-primary"></i>
+                    </div>
+                    <h3 class="text-lg font-medium text-text-primary mb-2">Drop OMR sheets here or click to browse</h3>
+                    <p class="text-text-secondary mb-4">Support for JPG, PNG, PDF files up to 10MB each</p>
+                    <button class="bg-primary text-white px-6 py-2 rounded-md hover:bg-primary-dark transition-colors">
+                        <i class="fas fa-folder-open mr-2"></i>Choose Files
+                    </button>
+                    <input type="file" class="hidden" accept="image/*,.pdf" multiple data-implementation="File upload handler">
+                </div>
+            </div>
+
+            <!-- Upload Queue -->
+            <div class="bg-surface rounded-lg shadow-material-2 p-6" id="uploadQueue" style="display: none;">
+                <h3 class="text-lg font-medium text-text-primary mb-4">Upload Queue</h3>
+                <div class="space-y-3" data-mock="true">
+                    <!-- @MAP: uploadedFiles.map(file => ( -->
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-primary-light bg-opacity-10 rounded-lg flex items-center justify-center mr-3">
+                                <i class="fas fa-file-image text-primary"></i>
+                            </div>
+                            <div>
+                                <p class="font-medium text-text-primary" data-mock="true">feedback_sheet_001.jpg</p>
+                                <p class="text-sm text-text-secondary" data-mock="true">2.3 MB</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center">
+                            <div class="w-32 bg-gray-200 rounded-full h-2 mr-3">
+                                <div class="bg-success h-2 rounded-full" style="width: 75%" data-bind="uploadProgress"></div>
+                            </div>
+                            <span class="text-sm text-success font-medium" data-mock="true">75%</span>
+                        </div>
+                    </div>
+                    <!-- @END_MAP )) -->
+                </div>
+            </div>
+
+            <!-- Processing Status -->
+            <div class="bg-surface rounded-lg shadow-material-2 p-6 mt-6" id="processingStatus" style="display: none;">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-text-primary">Processing OMR Sheets</h3>
+                    <div class="flex items-center text-accent">
+                        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-accent mr-2"></div>
+                        <span class="text-sm font-medium">Processing...</span>
+                    </div>
+                </div>
+                
+                <div class="space-y-4" data-mock="true">
+                    <!-- Processing Step -->
+                    <div class="flex items-center">
+                        <div class="w-6 h-6 bg-success rounded-full flex items-center justify-center mr-3">
+                            <i class="fas fa-check text-white text-xs"></i>
+                        </div>
+                        <span class="text-text-primary">Image preprocessing completed</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-6 h-6 bg-accent rounded-full flex items-center justify-center mr-3">
+                            <div class="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+                        </div>
+                        <span class="text-text-primary">Detecting OMR marks...</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+                            <span class="text-xs text-gray-600">3</span>
+                        </div>
+                        <span class="text-text-secondary">Calculating scores</span>
+                    </div>
+                </div>
+
+                <!-- @FUNCTIONALITY: OMR processing should implement image preprocessing, mark detection, and score calculation -->
+            </div>
+        </div>
+        <!-- @END_COMPONENT: UploadSection -->
+
+        <!-- @COMPONENT: ResultsSection -->
+        <div id="results-section" class="tab-content hidden">
+            <div class="mb-8">
+                <h2 class="text-3xl font-medium text-text-primary mb-2">Scan Results</h2>
+                <p class="text-text-secondary">Review and verify OMR sheet scanning results</p>
+            </div>
+
+            <!-- Results Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-surface rounded-lg shadow-material-2 p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-text-secondary text-sm font-medium">Total Sheets</p>
+                            <p class="text-2xl font-bold text-text-primary" data-mock="true">156</p>
+                        </div>
+                        <div class="w-12 h-12 bg-primary-light bg-opacity-10 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-file-alt text-xl text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-surface rounded-lg shadow-material-2 p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-text-secondary text-sm font-medium">Successfully Processed</p>
+                            <p class="text-2xl font-bold text-success" data-mock="true">148</p>
+                        </div>
+                        <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-check-circle text-xl text-success"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-surface rounded-lg shadow-material-2 p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-text-secondary text-sm font-medium">Needs Review</p>
+                            <p class="text-2xl font-bold text-accent" data-mock="true">8</p>
+                        </div>
+                        <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-exclamation-triangle text-xl text-accent"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-surface rounded-lg shadow-material-2 p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-text-secondary text-sm font-medium">Average Score</p>
+                            <p class="text-2xl font-bold text-text-primary" data-mock="true">4.2/5</p>
+                        </div>
+                        <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-star text-xl text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Individual Results Table -->
+            <div class="bg-surface rounded-lg shadow-material-2 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-text-primary">Individual Results</h3>
+                        <div class="flex items-center space-x-3">
+                            <button class="text-text-secondary hover:text-primary transition-colors">
+                                <i class="fas fa-download mr-1"></i>Export
+                            </button>
+                            <button class="text-text-secondary hover:text-primary transition-colors">
+                                <i class="fas fa-filter mr-1"></i>Filter
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Student ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Sheet Name</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Overall Score</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Processed Time</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200" data-mock="true">
+                            <!-- @MAP: results.map(result => ( -->
+                            <tr class="hover:bg-gray-50 transition-colors">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-text-primary" data-mock="true">STU001</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary" data-mock="true">feedback_sheet_001.jpg</td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="flex items-center">
+                                        <span class="text-sm font-medium text-text-primary mr-2" data-mock="true">4.5/5</span>
+                                        <div class="flex">
+                                            <!-- Rating stars -->
+                                            <i class="fas fa-star text-yellow-400 text-xs"></i>
+                                            <i class="fas fa-star text-yellow-400 text-xs"></i>
+                                            <i class="fas fa-star text-yellow-400 text-xs"></i>
+                                            <i class="fas fa-star text-yellow-400 text-xs"></i>
+                                            <i class="fas fa-star-half-alt text-yellow-400 text-xs"></i>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-success">
+                                        <i class="fas fa-check-circle mr-1"></i>
+                                        Verified
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary" data-mock="true">2 mins ago</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <button class="text-primary hover:text-primary-dark mr-3 transition-colors" data-event="click:viewDetails">
+                                        <i class="fas fa-eye mr-1"></i>View
+                                    </button>
+                                    <button class="text-accent hover:text-orange-600 transition-colors" data-event="click:downloadResult">
+                                        <i class="fas fa-download mr-1"></i>Export
+                                    </button>
+                                </td>
+                            </tr>
+                            
+                            <tr class="hover:bg-gray-50 transition-colors">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-text-primary" data-mock="true">STU002</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary" data-mock="true">feedback_sheet_002.jpg</td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="flex items-center">
+                                        <span class="text-sm font-medium text-text-primary mr-2" data-mock="true">3.8/5</span>
+                                        <div class="flex">
+                                            <i class="fas fa-star text-yellow-400 text-xs"></i>
+                                            <i class="fas fa-star text-yellow-400 text-xs"></i>
+                                            <i class="fas fa-star text-yellow-400 text-xs"></i>
+                                            <i class="fas fa-star text-yellow-400 text-xs"></i>
+                                            <i class="far fa-star text-gray-300 text-xs"></i>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-accent">
+                                        <i class="fas fa-exclamation-triangle mr-1"></i>
+                                        Review Needed
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary" data-mock="true">5 mins ago</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <button class="text-primary hover:text-primary-dark mr-3 transition-colors" data-event="click:viewDetails">
+                                        <i class="fas fa-eye mr-1"></i>Review
+                                    </button>
+                                    <button class="text-accent hover:text-orange-600 transition-colors" data-event="click:downloadResult">
+                                        <i class="fas fa-download mr-1"></i>Export
+                                    </button>
+                                </td>
+                            </tr>
+                            <!-- @END_MAP )) -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                <div class="px-6 py-4 border-t border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div class="text-sm text-text-secondary">
+                            Showing <span class="font-medium" data-mock="true">1</span> to <span class="font-medium" data-mock="true">10</span> of <span class="font-medium" data-mock="true">148</span> results
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button class="p-2 text-text-secondary hover:text-primary hover:bg-gray-100 rounded transition-colors">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <button class="px-3 py-1 bg-primary text-white rounded text-sm">1</button>
+                            <button class="px-3 py-1 text-text-secondary hover:bg-gray-100 rounded text-sm">2</button>
+                            <button class="px-3 py-1 text-text-secondary hover:bg-gray-100 rounded text-sm">3</button>
+                            <button class="p-2 text-text-secondary hover:text-primary hover:bg-gray-100 rounded transition-colors">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: ResultsSection -->
+
+        <!-- @COMPONENT: DashboardSection -->
+        <div id="dashboard-section" class="tab-content hidden">
+            <div class="mb-8">
+                <h2 class="text-3xl font-medium text-text-primary mb-2">Analytics Dashboard</h2>
+                <p class="text-text-secondary">Comprehensive insights and reporting for feedback analysis</p>
+            </div>
+
+            <!-- Dashboard Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <div class="bg-surface rounded-lg shadow-material-2 p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-medium text-text-primary">Processing Rate</h3>
+                        <i class="fas fa-chart-line text-xl text-success"></i>
+                    </div>
+                    <div class="text-3xl font-bold text-success mb-2" data-mock="true">94.8%</div>
+                    <p class="text-text-secondary text-sm">Successful scan rate this month</p>
+                    <div class="mt-4 w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-success h-2 rounded-full" style="width: 94.8%"></div>
+                    </div>
+                </div>
+
+                <div class="bg-surface rounded-lg shadow-material-2 p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-medium text-text-primary">Average Response</h3>
+                        <i class="fas fa-star text-xl text-accent"></i>
+                    </div>
+                    <div class="text-3xl font-bold text-primary mb-2" data-mock="true">4.2/5</div>
+                    <p class="text-text-secondary text-sm">Overall satisfaction rating</p>
+                    <div class="flex mt-3">
+                        <i class="fas fa-star text-yellow-400"></i>
+                        <i class="fas fa-star text-yellow-400"></i>
+                        <i class="fas fa-star text-yellow-400"></i>
+                        <i class="fas fa-star text-yellow-400"></i>
+                        <i class="fas fa-star-half-alt text-yellow-400"></i>
+                    </div>
+                </div>
+
+                <div class="bg-surface rounded-lg shadow-material-2 p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-medium text-text-primary">Total Processed</h3>
+                        <i class="fas fa-file-check text-xl text-primary"></i>
+                    </div>
+                    <div class="text-3xl font-bold text-text-primary mb-2" data-mock="true">2,847</div>
+                    <p class="text-text-secondary text-sm">Sheets processed this semester</p>
+                    <div class="flex items-center mt-3 text-success text-sm">
+                        <i class="fas fa-arrow-up mr-1"></i>
+                        <span data-mock="true">+12% from last month</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <!-- Feedback Trends Chart -->
+                <div class="bg-surface rounded-lg shadow-material-2 p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-medium text-text-primary">Feedback Trends</h3>
+                        <select class="text-sm border border-gray-300 rounded px-3 py-1 focus:ring-2 focus:ring-primary focus:border-primary">
+                            <option>Last 7 days</option>
+                            <option>Last 30 days</option>
+                            <option>Last 3 months</option>
+                        </select>
+                    </div>
+                    <!-- Chart Placeholder -->
+                    <div class="h-64 bg-gray-50 rounded-lg flex items-center justify-center" data-implementation="Chart.js or similar charting library">
+                        <div class="text-center">
+                            <i class="fas fa-chart-area text-4xl text-gray-400 mb-4"></i>
+                            <p class="text-text-secondary">Feedback trend visualization</p>
+                            <p class="text-sm text-text-secondary">Daily average ratings over time</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Category Breakdown -->
+                <div class="bg-surface rounded-lg shadow-material-2 p-6">
+                    <h3 class="text-lg font-medium text-text-primary mb-6">Response Distribution</h3>
+                    <div class="space-y-4" data-mock="true">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-4 h-4 bg-success rounded mr-3"></div>
+                                <span class="text-text-primary">Excellent (5)</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="text-text-secondary mr-3">42%</span>
+                                <div class="w-24 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-success h-2 rounded-full" style="width: 42%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-4 h-4 bg-primary rounded mr-3"></div>
+                                <span class="text-text-primary">Good (4)</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="text-text-secondary mr-3">31%</span>
+                                <div class="w-24 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-primary h-2 rounded-full" style="width: 31%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-4 h-4 bg-accent rounded mr-3"></div>
+                                <span class="text-text-primary">Average (3)</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="text-text-secondary mr-3">18%</span>
+                                <div class="w-24 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-accent h-2 rounded-full" style="width: 18%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-4 h-4 bg-orange-400 rounded mr-3"></div>
+                                <span class="text-text-primary">Below Average (2)</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="text-text-secondary mr-3">7%</span>
+                                <div class="w-24 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-orange-400 h-2 rounded-full" style="width: 7%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-4 h-4 bg-error rounded mr-3"></div>
+                                <span class="text-text-primary">Poor (1)</span>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="text-text-secondary mr-3">2%</span>
+                                <div class="w-24 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-error h-2 rounded-full" style="width: 2%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="bg-surface rounded-lg shadow-material-2 p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-lg font-medium text-text-primary">Recent Processing Activity</h3>
+                    <button class="text-primary hover:text-primary-dark text-sm transition-colors">
+                        <i class="fas fa-refresh mr-1"></i>Refresh
+                    </button>
+                </div>
+                <div class="space-y-4" data-mock="true">
+                    <!-- @MAP: recentActivity.map(activity => ( -->
+                    <div class="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-success bg-opacity-10 rounded-lg flex items-center justify-center mr-3">
+                                <i class="fas fa-check-circle text-success"></i>
+                            </div>
+                            <div>
+                                <p class="text-text-primary font-medium" data-mock="true">Batch OMR-2024-001 processed successfully</p>
+                                <p class="text-text-secondary text-sm" data-mock="true">45 sheets processed • 2 minutes ago</p>
+                            </div>
+                        </div>
+                        <button class="text-primary hover:text-primary-dark text-sm transition-colors">View Details</button>
+                    </div>
+                    
+                    <div class="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-accent bg-opacity-10 rounded-lg flex items-center justify-center mr-3">
+                                <i class="fas fa-exclamation-triangle text-accent"></i>
+                            </div>
+                            <div>
+                                <p class="text-text-primary font-medium" data-mock="true">Manual review required for Batch OMR-2024-002</p>
+                                <p class="text-text-secondary text-sm" data-mock="true">3 sheets need verification • 15 minutes ago</p>
+                            </div>
+                        </div>
+                        <button class="text-accent hover:text-orange-600 text-sm transition-colors">Review Now</button>
+                    </div>
+                    <!-- @END_MAP )) -->
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: DashboardSection -->
+
+        <!-- @COMPONENT: AdminSection -->
+        <div id="admin-section" class="tab-content hidden">
+            <div class="mb-8">
+                <h2 class="text-3xl font-medium text-text-primary mb-2">System Administration</h2>
+                <p class="text-text-secondary">Manage system settings, users, and OMR template configurations</p>
+            </div>
+
+            <!-- Admin Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <div class="bg-surface rounded-lg shadow-material-2 p-6 hover:shadow-material-4 transition-shadow cursor-pointer">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-primary-light bg-opacity-10 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-users text-xl text-primary"></i>
+                        </div>
+                        <span class="text-2xl font-bold text-primary" data-mock="true">24</span>
+                    </div>
+                    <h3 class="text-lg font-medium text-text-primary mb-2">User Management</h3>
+                    <p class="text-text-secondary text-sm mb-4">Manage system users and permissions</p>
+                    <button class="text-primary hover:text-primary-dark text-sm font-medium transition-colors">
+                        Manage Users <i class="fas fa-arrow-right ml-1"></i>
+                    </button>
+                </div>
+
+                <div class="bg-surface rounded-lg shadow-material-2 p-6 hover:shadow-material-4 transition-shadow cursor-pointer">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-secondary-light bg-opacity-10 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-cog text-xl text-secondary"></i>
+                        </div>
+                        <span class="text-xs bg-accent text-white px-2 py-1 rounded-full" data-mock="true">3 pending</span>
+                    </div>
+                    <h3 class="text-lg font-medium text-text-primary mb-2">System Settings</h3>
+                    <p class="text-text-secondary text-sm mb-4">Configure scanning parameters and thresholds</p>
+                    <button class="text-secondary hover:text-green-700 text-sm font-medium transition-colors">
+                        Configure <i class="fas fa-arrow-right ml-1"></i>
+                    </button>
+                </div>
+
+                <div class="bg-surface rounded-lg shadow-material-2 p-6 hover:shadow-material-4 transition-shadow cursor-pointer">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-accent bg-opacity-10 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-file-alt text-xl text-accent"></i>
+                        </div>
+                        <span class="text-2xl font-bold text-accent" data-mock="true">5</span>
+                    </div>
+                    <h3 class="text-lg font-medium text-text-primary mb-2">OMR Templates</h3>
+                    <p class="text-text-secondary text-sm mb-4">Manage scanning templates and formats</p>
+                    <button class="text-accent hover:text-orange-600 text-sm font-medium transition-colors">
+                        Edit Templates <i class="fas fa-arrow-right ml-1"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <div class="bg-surface rounded-lg shadow-material-2 p-6">
+                    <h3 class="text-lg font-medium text-text-primary mb-6">System Health</h3>
+                    <div class="space-y-4" data-mock="true">
+                        <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                            <div class="flex items-center">
+                                <div class="w-2 h-2 bg-success rounded-full mr-3"></div>
+                                <span class="text-text-primary">Database Connection</span>
+                            </div>
+                            <span class="text-success text-sm font-medium">Healthy</span>
+                        </div>
+                        
+                        <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                            <div class="flex items-center">
+                                <div class="w-2 h-2 bg-success rounded-full mr-3"></div>
+                                <span class="text-text-primary">OMR Processing Service</span>
+                            </div>
+                            <span class="text-success text-sm font-medium">Running</span>
+                        </div>
+                        
+                        <div class="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                            <div class="flex items-center">
+                                <div class="w-2 h-2 bg-accent rounded-full mr-3"></div>
+                                <span class="text-text-primary">Storage Usage</span>
+                            </div>
+                            <span class="text-accent text-sm font-medium">75% Used</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-surface rounded-lg shadow-material-2 p-6">
+                    <h3 class="text-lg font-medium text-text-primary mb-6">Database Statistics</h3>
+                    <div class="space-y-4" data-mock="true">
+                        <div class="flex items-center justify-between">
+                            <span class="text-text-secondary">Total Records</span>
+                            <span class="text-text-primary font-medium">15,247</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-text-secondary">Storage Size</span>
+                            <span class="text-text-primary font-medium">2.3 GB</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-text-secondary">Backup Status</span>
+                            <span class="text-success font-medium">
+                                <i class="fas fa-check-circle mr-1"></i>
+                                Up to date
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-text-secondary">Last Maintenance</span>
+                            <span class="text-text-primary font-medium">2 days ago</span>
+                        </div>
+                    </div>
+                    <button class="mt-4 w-full bg-primary text-white py-2 rounded-md hover:bg-primary-dark transition-colors">
+                        <i class="fas fa-tools mr-2"></i>Run Maintenance
+                    </button>
+                </div>
+            </div>
+
+            <!-- Audit Log -->
+            <div class="bg-surface rounded-lg shadow-material-2 p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-lg font-medium text-text-primary">Recent Activity Log</h3>
+                    <button class="text-primary hover:text-primary-dark text-sm transition-colors">
+                        <i class="fas fa-download mr-1"></i>Export Log
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full">
+                        <thead>
+                            <tr class="border-b border-gray-200">
+                                <th class="text-left py-3 px-4 font-medium text-text-secondary">Time</th>
+                                <th class="text-left py-3 px-4 font-medium text-text-secondary">User</th>
+                                <th class="text-left py-3 px-4 font-medium text-text-secondary">Action</th>
+                                <th class="text-left py-3 px-4 font-medium text-text-secondary">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100" data-mock="true">
+                            <tr>
+                                <td class="py-3 px-4 text-sm text-text-secondary" data-mock="true">2024-01-15 10:30:22</td>
+                                <td class="py-3 px-4 text-sm text-text-primary" data-mock="true">admin@school.edu</td>
+                                <td class="py-3 px-4 text-sm text-text-primary" data-mock="true">Updated OMR template configuration</td>
+                                <td class="py-3 px-4">
+                                    <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-success">Success</span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="py-3 px-4 text-sm text-text-secondary" data-mock="true">2024-01-15 09:15:11</td>
+                                <td class="py-3 px-4 text-sm text-text-primary" data-mock="true">teacher@school.edu</td>
+                                <td class="py-3 px-4 text-sm text-text-primary" data-mock="true">Processed batch OMR-2024-001</td>
+                                <td class="py-3 px-4">
+                                    <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-success">Success</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: AdminSection -->
+
+    </main>
+
+    <!-- @COMPONENT: ResultDetailModal -->
+    <div id="resultModal" class="fixed inset-0 z-50 hidden">
+        <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity"></div>
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-center justify-center p-4">
+                <div class="bg-surface rounded-lg shadow-material-4 transform transition-all max-w-4xl w-full">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-lg font-medium text-text-primary">Detailed Scan Results</h3>
+                            <button class="text-text-secondary hover:text-text-primary transition-colors" id="closeModal">
+                                <i class="fas fa-times text-xl"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="p-6">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <!-- Original Image Preview -->
+                            <div>
+                                <h4 class="font-medium text-text-primary mb-4">Original OMR Sheet</h4>
+                                <!-- High-resolution scan of rural countryside with rolling hills and farmlands -->
+                                <img src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=600" alt="OMR sheet preview" class="w-full rounded-lg shadow-material-1 mb-4" data-mock-image="true" data-implementation="Display actual uploaded OMR sheet">
+                                
+                                <div class="bg-gray-50 p-4 rounded-lg">
+                                    <h5 class="font-medium text-text-primary mb-2">Sheet Information</h5>
+                                    <div class="space-y-2 text-sm">
+                                        <div class="flex justify-between">
+                                            <span class="text-text-secondary">Student ID:</span>
+                                            <span class="text-text-primary" data-mock="true">STU001</span>
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span class="text-text-secondary">Sheet Type:</span>
+                                            <span class="text-text-primary" data-mock="true">Feedback Form v2.1</span>
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span class="text-text-secondary">Scan Quality:</span>
+                                            <span class="text-success" data-mock="true">Excellent (98%)</span>
+                                        </div>
+                                        <div class="flex justify-between">
+                                            <span class="text-text-secondary">Processing Time:</span>
+                                            <span class="text-text-primary" data-mock="true">2.3 seconds</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Detailed Results -->
+                            <div>
+                                <h4 class="font-medium text-text-primary mb-4">Feedback Responses</h4>
+                                <div class="space-y-4" data-mock="true">
+                                    <!-- Question Results -->
+                                    <div class="bg-gray-50 p-4 rounded-lg">
+                                        <div class="flex justify-between items-center mb-2">
+                                            <span class="font-medium text-text-primary">Course Content Quality</span>
+                                            <div class="flex items-center">
+                                                <div class="flex mr-2">
+                                                    <i class="fas fa-star text-yellow-400 text-sm"></i>
+                                                    <i class="fas fa-star text-yellow-400 text-sm"></i>
+                                                    <i class="fas fa-star text-yellow-400 text-sm"></i>
+                                                    <i class="fas fa-star text-yellow-400 text-sm"></i>
+                                                    <i class="fas fa-star text-yellow-400 text-sm"></i>
+                                                </div>
+                                                <span class="text-sm font-medium">5/5</span>
+                                            </div>
+                                        </div>
+                                        <div class="text-xs text-text-secondary">Detected mark: Circle 5 (Excellent)</div>
+                                    </div>
+                                    
+                                    <div class="bg-gray-50 p-4 rounded-lg">
+                                        <div class="flex justify-between items-center mb-2">
+                                            <span class="font-medium text-text-primary">Teaching Effectiveness</span>
+                                            <div class="flex items-center">
+                                                <div class="flex mr-2">
+                                                    <i class="fas fa-star text-yellow-400 text-sm"></i>
+                                                    <i class="fas fa-star text-yellow-400 text-sm"></i>
+                                                    <i class="fas fa-star text-yellow-400 text-sm"></i>
+                                                    <i class="fas fa-star text-yellow-400 text-sm"></i>
+                                                    <i class="far fa-star text-gray-300 text-sm"></i>
+                                                </div>
+                                                <span class="text-sm font-medium">4/5</span>
+                                            </div>
+                                        </div>
+                                        <div class="text-xs text-text-secondary">Detected mark: Circle 4 (Good)</div>
+                                    </div>
+                                    
+                                    <div class="bg-gray-50 p-4 rounded-lg">
+                                        <div class="flex justify-between items-center mb-2">
+                                            <span class="font-medium text-text-primary">Overall Satisfaction</span>
+                                            <div class="flex items-center">
+                                                <div class="flex mr-2">
+                                                    <i class="fas fa-star text-yellow-400 text-sm"></i>
+                                                    <i class="fas fa-star text-yellow-400 text-sm"></i>
+                                                    <i class="fas fa-star text-yellow-400 text-sm"></i>
+                                                    <i class="fas fa-star text-yellow-400 text-sm"></i>
+                                                    <i class="fas fa-star-half-alt text-yellow-400 text-sm"></i>
+                                                </div>
+                                                <span class="text-sm font-medium">4.5/5</span>
+                                            </div>
+                                        </div>
+                                        <div class="text-xs text-text-secondary">Detected mark: Circle 4.5 (Between Good-Excellent)</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Summary -->
+                                <div class="mt-6 p-4 bg-primary bg-opacity-10 rounded-lg">
+                                    <h5 class="font-medium text-primary mb-2">Overall Analysis</h5>
+                                    <div class="grid grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <span class="text-text-secondary">Average Score:</span>
+                                            <div class="text-lg font-bold text-primary" data-mock="true">4.5/5</div>
+                                        </div>
+                                        <div>
+                                            <span class="text-text-secondary">Confidence Level:</span>
+                                            <div class="text-lg font-bold text-success" data-mock="true">98%</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                        <button class="px-4 py-2 text-text-secondary hover:text-text-primary transition-colors">
+                            <i class="fas fa-flag mr-1"></i>Flag for Review
+                        </button>
+                        <button class="px-4 py-2 bg-accent text-white rounded-md hover:bg-orange-600 transition-colors">
+                            <i class="fas fa-download mr-1"></i>Export Result
+                        </button>
+                        <button class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark transition-colors">
+                            <i class="fas fa-check mr-1"></i>Mark as Verified
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: ResultDetailModal -->
+
+    <!-- Floating Action Button -->
+    <button class="fixed bottom-6 right-6 w-14 h-14 bg-primary text-white rounded-full shadow-material-4 hover:shadow-lg hover:bg-primary-dark transition-all duration-300 flex items-center justify-center z-40">
+        <i class="fas fa-plus text-xl"></i>
+    </button>
+
+    <script>
+        (function() {
+            // Tab Navigation
+            const tabLinks = document.querySelectorAll('a[data-tab]');
+            const tabContents = document.querySelectorAll('.tab-content');
+            
+            tabLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Remove active classes
+                    tabLinks.forEach(l => {
+                        l.classList.remove('text-primary', 'border-b-2', 'border-primary');
+                        l.classList.add('text-text-secondary');
+                    });
+                    
+                    tabContents.forEach(content => {
+                        content.classList.add('hidden');
+                    });
+                    
+                    // Add active class to clicked tab
+                    this.classList.remove('text-text-secondary');
+                    this.classList.add('text-primary', 'border-b-2', 'border-primary');
+                    
+                    // Show corresponding content
+                    const tabName = this.getAttribute('data-tab');
+                    const targetContent = document.getElementById(tabName + '-section');
+                    if (targetContent) {
+                        targetContent.classList.remove('hidden');
+                    }
+                });
+            });
+
+            // Modal functionality
+            const resultModal = document.getElementById('resultModal');
+            const closeModal = document.getElementById('closeModal');
+            
+            // View details buttons
+            document.addEventListener('click', function(e) {
+                if (e.target.closest('[data-event*="viewDetails"]')) {
+                    e.preventDefault();
+                    resultModal.classList.remove('hidden');
+                    // TODO: Load actual result data
+                }
+            });
+            
+            if (closeModal) {
+                closeModal.addEventListener('click', function() {
+                    resultModal.classList.add('hidden');
+                });
+            }
+            
+            // Close modal on backdrop click
+            if (resultModal) {
+                resultModal.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        this.classList.add('hidden');
+                    }
+                });
+            }
+
+            // File Upload Simulation
+            const dropZone = document.getElementById('dropZone');
+            const uploadQueue = document.getElementById('uploadQueue');
+            const processingStatus = document.getElementById('processingStatus');
+            
+            if (dropZone) {
+                dropZone.addEventListener('click', function() {
+                    // Simulate file selection and upload
+                    uploadQueue.style.display = 'block';
+                    
+                    setTimeout(() => {
+                        processingStatus.style.display = 'block';
+                    }, 2000);
+                    
+                    // TODO: Implement actual file upload functionality
+                });
+            }
+
+            // Responsive Mobile Menu
+            const createMobileMenu = () => {
+                const nav = document.querySelector('nav');
+                const navContainer = nav.querySelector('.max-w-7xl');
+                
+                // Create mobile menu button
+                const mobileButton = document.createElement('button');
+                mobileButton.className = 'md:hidden p-2 rounded-md text-text-secondary hover:text-primary hover:bg-gray-100';
+                mobileButton.innerHTML = '<i class="fas fa-bars text-lg"></i>';
+                
+                // Insert mobile button
+                const rightSection = navContainer.querySelector('.hidden.md\\:block');
+                rightSection.parentNode.insertBefore(mobileButton, rightSection);
+                
+                // Create mobile menu
+                const mobileMenu = document.createElement('div');
+                mobileMenu.className = 'md:hidden hidden bg-surface border-t border-gray-200';
+                mobileMenu.innerHTML = `
+                    <div class="px-2 pt-2 pb-3 space-y-1">
+                        <a href="#upload" class="block px-3 py-2 text-primary font-medium" data-tab="upload">Upload</a>
+                        <a href="#results" class="block px-3 py-2 text-text-secondary hover:text-primary" data-tab="results">Results</a>
+                        <a href="#dashboard" class="block px-3 py-2 text-text-secondary hover:text-primary" data-tab="dashboard">Dashboard</a>
+                        <a href="#admin" class="block px-3 py-2 text-text-secondary hover:text-primary" data-tab="admin">Admin</a>
+                    </div>
+                `;
+                
+                nav.appendChild(mobileMenu);
+                
+                mobileButton.addEventListener('click', () => {
+                    mobileMenu.classList.toggle('hidden');
+                });
+            };
+            
+            createMobileMenu();
+            
+            // Initialize with upload tab active
+            document.querySelector('a[data-tab="upload"]').click();
+        })();
+    </script>
+
+</body>
+</html>

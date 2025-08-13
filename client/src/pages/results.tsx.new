@@ -1,0 +1,191 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, Link } from 'wouter';
+import axios from 'axios';
+import toast, { Toaster } from 'react-hot-toast';
+import { 
+  Download, 
+  FileText, 
+  Printer, 
+  ArrowLeft
+} from 'lucide-react';
+
+interface OmrSheet {
+  id: string;
+  studentId: string;
+  fileName: string;
+  status: string;
+  overallScore: number;
+  confidence: number;
+  responses: Record<string, any>;
+  processedAt: string;
+}
+
+interface ResultsData {
+  batchCode: string;
+  totalSheets: number;
+  processedSheets: number;
+  needsReview: number;
+  averageScore: number;
+  sheets: OmrSheet[];
+}
+
+const ResultsPage = () => {
+  const params = useParams();
+  const batchCode = params.batchCode;
+  const [results, setResults] = useState<ResultsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchResults = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`http://localhost:5001/api/results/${batchCode}`);
+      setResults(response.data);
+      toast.success('Results loaded successfully');
+    } catch (error: any) {
+      console.error('Error fetching results:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to fetch results';
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, [batchCode]);
+
+  useEffect(() => {
+    fetchResults();
+  }, [fetchResults]);
+
+  if (loading) {
+    return <div className="loading">Loading results...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="error">
+        <h2>Error</h2>
+        <p>{error}</p>
+        <button onClick={fetchResults}>Retry</button>
+      </div>
+    );
+  }
+
+  if (!results) {
+    return <div className="no-results">No results found</div>;
+  }
+
+  return (
+    <div className="results-container">
+      <Toaster position="top-right" />
+      
+      <div className="main-container">
+        {/* Header */}
+        <div className="results-header">
+          <div className="results-info">
+            <Link to="/dashboard" className="back-link">
+              <ArrowLeft size={20} />
+              Back to Dashboard
+            </Link>
+            <h1 data-testid="text-batch-code">Batch Code: {results.batchCode}</h1>
+            <p data-testid="text-batch-info">
+              Total Sheets: {results.totalSheets} • 
+              Processed: {results.processedSheets} •
+              Review Needed: {results.needsReview}
+            </p>
+            <div className="stats">
+              <span className="stat-item" data-testid="text-average-score">
+                Average Score: {results.averageScore}%
+              </span>
+              <span className="stat-item" data-testid="text-processing-status">
+                Processing Complete: {results.processedSheets === results.totalSheets ? 'Yes' : 'No'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Sheet Grid */}
+        <div className="sheets-grid">
+          {results.sheets.map((sheet, index) => (
+            <div 
+              key={sheet.id} 
+              className={`sheet-card ${sheet.status}`}
+              data-testid={`sheet-card-${index}`}
+            >
+              <div className="sheet-header">
+                <div>
+                  <h3 className="student-id">{sheet.studentId}</h3>
+                  <p className="file-name">{sheet.fileName}</p>
+                </div>
+                <div className="status-badge">
+                  {sheet.status.replace('_', ' ')}
+                </div>
+              </div>
+              
+              <div className="score-section">
+                <div 
+                  className="score-value"
+                  data-testid={`score-value-${index}`}
+                >
+                  {sheet.overallScore}%
+                </div>
+                <div className="confidence">
+                  Confidence: {Math.round(sheet.confidence * 100)}%
+                </div>
+              </div>
+              
+              <div className="actions">
+                <button className="action-btn" title="View Details">
+                  <FileText size={20} />
+                </button>
+                {sheet.status === 'processed' && (
+                  <>
+                    <button className="action-btn" title="Download">
+                      <Download size={20} />
+                    </button>
+                    <button className="action-btn" title="Print">
+                      <Printer size={20} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Mobile View */}
+        <div className="mobile-view">
+          <table>
+            <thead>
+              <tr>
+                <th>Student ID</th>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.sheets.map((sheet, index) => (
+                <tr key={sheet.id}>
+                  <td>{sheet.studentId}</td>
+                  <td>
+                    <span className={`status-badge ${sheet.status}`}>
+                      {sheet.status.replace('_', ' ')}
+                    </span>
+                  </td>
+                  <td>{sheet.overallScore}%</td>
+                  <td>
+                    <button className="icon-btn" title="View Details">
+                      <FileText size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ResultsPage;

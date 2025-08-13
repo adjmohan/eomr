@@ -1,9 +1,11 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import multer from "multer";
 import path from "path";
 import { z } from "zod";
+import type { OmrSheet } from "@shared/schema";
+import { ProcessFile } from "multer";
 import { insertBatchSchema, insertOmrSheetSchema } from "@shared/schema";
 import { processOMRImage } from "./lib/omr-processor";
 
@@ -42,12 +44,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create new batch
   app.post("/api/batches", async (req, res) => {
     try {
-      const batchData = insertBatchSchema.parse(req.body);
-      const batch = await storage.createBatch(batchData);
+      const batchData = insertBatchSchema.parse({
+        ...req.body,
+        status: "processing",
+        processedSheets: 0,
+      });
+
+      // Get admin user for created_by field
+      const adminUser = await storage.getUserByUsername('admin');
+      if (!adminUser) {
+        return res.status(500).json({ message: "Admin user not found" });
+      }
+
+      const batch = await storage.createBatch({
+        ...batchData,
+        createdBy: adminUser.id,
+      });
+
       res.status(201).json(batch);
     } catch (error) {
       console.error('Error creating batch:', error);
-      res.status(400).json({ message: "Invalid batch data" });
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid batch data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create batch" });
     }
   });
 
@@ -63,8 +83,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const sheets = await storage.getOmrSheetsByBatch(batch.id);
       
+      // Calculate batch statistics
+      const processedSheets = sheets.filter(sheet => sheet.status === 'processed');
+      const averageScore = processedSheets.length > 0
+        ? processedSheets.reduce((sum, sheet) => sum + (Number(sheet.overallScore) || 0), 0) / processedSheets.length
+        : 0;
+
       res.json({
         ...batch,
+        totalProcessed: processedSheets.length,
+        needsReview: sheets.filter(sheet => sheet.status === 'review_needed').length,
+        averageScore: Math.round(averageScore * 100) / 100,
         sheets,
       });
     } catch (error) {
@@ -74,10 +103,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upload OMR sheets
-  app.post("/api/upload/:batchCode", upload.array('files'), async (req, res) => {
+  app.post("/api/upload/:batchCode", upload.array('files'), async (req: Request & { files?: Express.Multer.File[] }, res) => {
     try {
       const { batchCode } = req.params;
-      const files = req.files as Express.Multer.File[];
+      const files = req.files;
       
       if (!files || files.length === 0) {
         return res.status(400).json({ message: "No files uploaded" });
@@ -86,13 +115,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let batch = await storage.getBatchByCode(batchCode);
       
       if (!batch) {
+        // Get admin user for created_by field
+        const adminUser = await storage.getUserByUsername('admin');
+        if (!adminUser) {
+          return res.status(500).json({ message: "Admin user not found" });
+        }
+
         // Create new batch if it doesn't exist
         batch = await storage.createBatch({
           batchCode,
           name: `Batch ${batchCode}`,
           description: `Auto-created batch for upload ${batchCode}`,
-          createdBy: 'system', // TODO: Use actual user ID from session
+          createdBy: adminUser.id,
           totalSheets: files.length,
+          status: "processing",
+          processedSheets: 0,
         });
       }
 
@@ -100,14 +137,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (const file of files) {
         const studentId = path.parse(file.originalname).name; // Use filename as student ID
+        const timestamp = Date.now();
+        const filePath = path.join(process.cwd(), 'uploads', `${timestamp}_${file.originalname}`);
         
         const omrSheet = await storage.createOmrSheet({
           batchId: batch.id,
           studentId,
           fileName: file.originalname,
-          filePath: file.path,
+          filePath,
           status: 'pending',
-        });
+          processingTime: 0,
+          responses: {},
+          metadata: {
+            originalName: file.originalname,
+            mimeType: file.mimetype,
+            size: file.size
+          }
 
         uploadedSheets.push(omrSheet);
 
@@ -186,9 +231,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           studentId: sheet.studentId,
           fileName: sheet.fileName,
           status: sheet.status,
-          overallScore: sheet.overallScore,
-          confidence: sheet.confidence,
-          responses: sheet.responses,
+          overallScore: Number(sheet.overallScore) || 0,
+          confidence: Number(sheet.confidence) || 0,
+          responses: sheet.responses || {},
           processedAt: sheet.processedAt,
         })),
       });
@@ -280,3 +325,4 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   return httpServer;
 }
+  

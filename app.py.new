@@ -1,0 +1,166 @@
+import os
+import json
+import cv2
+import numpy as np
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS, cross_origin
+from PIL import Image
+import pdf2image
+import psycopg2
+from psycopg2.extras import RealDictCursor, Json
+from datetime import datetime
+import io
+import base64
+from werkzeug.utils import secure_filename
+import tempfile
+import logging
+from dotenv import load_dotenv
+import uuid
+
+# Load environment variables
+load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = Flask(__name__)
+CORS(app, resources={
+    r"/*": {
+        "origins": ["http://localhost:5173", "http://localhost:5176"],  # Add your frontend URL
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
+
+# Configuration
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
+MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
+
+# Create uploads directory if it doesn't exist
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Database connection
+def get_db_connection():
+    try:
+        # Get database config from environment variables
+        db_config = {
+            'host': os.getenv('PGHOST', 'localhost'),
+            'database': os.getenv('PGDATABASE', 'omrscan'),
+            'user': os.getenv('PGUSER', 'postgres'),
+            'password': os.getenv('PGPASSWORD', 'root'),
+            'port': os.getenv('PGPORT', '5432')
+        }
+        
+        # Log connection attempt (without password)
+        log_config = db_config.copy()
+        log_config.pop('password')
+        logger.info(f"Attempting database connection with config: {log_config}")
+        
+        conn = psycopg2.connect(**db_config)
+        logger.info("Database connection successful")
+        return conn
+        
+    except psycopg2.Error as e:
+        logger.error(f"PostgreSQL Error: {e.diag.message_primary if hasattr(e, 'diag') else str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error in database connection: {str(e)}")
+        return None
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# Routes
+@app.route('/api/batches', methods=['POST'])
+def create_batch():
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['batchCode', 'name', 'description', 'totalStudents', 'subjects']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        # Get admin user for created_by field
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id FROM users WHERE username = 'admin'")
+        admin = cur.fetchone()
+
+        if not admin:
+            return jsonify({'error': 'Admin user not found'}), 500
+
+        # Insert new batch
+        cur.execute('''
+            INSERT INTO batches (
+                batch_code,
+                name,
+                description,
+                created_by,
+                total_sheets,
+                status
+            ) VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING *
+        ''', (
+            data['batchCode'],
+            data['name'],
+            data['description'],
+            admin['id'],
+            data['totalStudents'],
+            'processing'
+        ))
+
+        new_batch = cur.fetchone()
+        conn.commit()
+
+        # Convert UUID to string for JSON serialization
+        new_batch['id'] = str(new_batch['id'])
+        new_batch['created_by'] = str(new_batch['created_by'])
+
+        return jsonify(new_batch), 201
+
+    except psycopg2.Error as e:
+        logger.error(f"Database error: {e}")
+        return jsonify({'error': 'Database error occurred'}), 500
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+    finally:
+        if 'cur' in locals():
+            cur.close()
+        if 'conn' in locals() and conn:
+            conn.close()
+
+class OMRProcessor:
+    def __init__(self):
+        self.question_regions = [
+            # Define regions for 5 questions with 5 rating options each
+            # Format: (x, y, width, height) for each option
+            # Question 1: Course Content Quality
+            [(100, 150, 25, 25), (140, 150, 25, 25), (180, 150, 25, 25), (220, 150, 25, 25), (260, 150, 25, 25)],
+            # Question 2: Teaching Effectiveness  
+            [(100, 200, 25, 25), (140, 200, 25, 25), (180, 200, 25, 25), (220, 200, 25, 25), (260, 200, 25, 25)],
+            # Question 3: Learning Materials
+            [(100, 250, 25, 25), (140, 250, 25, 25), (180, 250, 25, 25), (220, 250, 25, 25), (260, 250, 25, 25)],
+            # Question 4: Assessment Methods
+            [(100, 300, 25, 25), (140, 300, 25, 25), (180, 300, 25, 25), (220, 300, 25, 25), (260, 300, 25, 25)],
+            # Question 5: Overall Satisfaction
+            [(100, 350, 25, 25), (140, 350, 25, 25), (180, 350, 25, 25), (220, 350, 25, 25), (260, 350, 25, 25)]
+        ]
+        
+        self.questions = [
+            "Course Content Quality",
+            "Teaching Effectiveness", 
+            "Learning Materials",
+            "Assessment Methods",
+            "Overall Satisfaction"
+        ]

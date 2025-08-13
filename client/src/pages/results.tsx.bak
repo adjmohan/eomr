@@ -1,0 +1,445 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, Link } from 'wouter';
+import axios from 'axios';
+import toast, { Toaster } from 'react-hot-toast';
+import { 
+  Download, 
+  FileText, 
+  Printer, 
+  ArrowLeft
+} from 'lucide-react';
+
+interface OmrSheet {
+  id: string;
+  studentId: string;
+  fileName: string;
+  status: string;
+  ov                <th>Student ID</th>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Confidence</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.sheets.map((sheet, index) => {
+                const score = sheet.overallScore;
+                const confidence = Math.round(sheet.confidence * 100);
+                return (
+                  <tr key={sheet.id} style={{ opacity: sheet.status === 'processed' ? 1 : 0.8 }} data-testid={`row-sheet-${index}`}>
+                    <td>mber;
+  confidence: number;
+  responses: Record<string, any>;
+  processedAt: string;
+}
+
+interface ResultsData {
+  batchCode: string;
+  totalSheets: number;
+  processedSheets: number;
+  needsReview: number;
+  averageScore: number;
+  sheets: OmrSheet[];
+}
+
+interface OmrSheet {
+  id: string;
+  studentId: string;
+  fileName: string;
+  status: string;
+  overallScore: number;
+  confidence: number;
+  responses: Record<string, any>;
+  processedAt: string;
+}
+
+interface ResultsData {
+  batchCode: string;
+  totalSheets: number;
+  processedSheets: number;
+  needsReview: number;
+  averageScore: number;
+  sheets: OmrSheet[];
+}
+
+const ResultsPage = () => {
+  const params = useParams();
+  const batchCode = params.batchCode;
+  const [results, setResults] = useState<ResultsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchResults = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`http://localhost:5001/api/results/${batchCode}`);
+      setResults(response.data);
+      
+      // Show success message with data source info
+      if (response.data.dataSource === 'memory') {
+        toast.success('Results loaded from temporary storage (database unavailable)');
+      } else if (response.data.dataSource === 'database') {
+        toast.success('Results loaded from database');
+      }
+    } catch (error: any) {
+      console.error('Error fetching results:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to fetch results';
+      const suggestion = error.response?.data?.suggestion || '';
+      setError(`${errorMessage}${suggestion ? ` - ${suggestion}` : ''}`);
+      toast.error('Failed to load results');
+    } finally {
+      setLoading(false);
+    }
+  }, [batchCode]);
+
+  useEffect(() => {
+    fetchResults();
+  }, [fetchResults]);
+
+  const exportToExcel = async () => {
+    try {
+      const response = await axios.get(`http://localhost:5001/api/export/excel/${batchCode}`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${batchCode}_results.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Excel file downloaded successfully');
+    } catch (error) {
+      toast.error('Failed to export to Excel');
+    }
+  };
+
+  const exportToPDF = async () => {
+    try {
+      const response = await axios.get(`http://localhost:5001/api/export/pdf/${batchCode}`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${batchCode}_results.html`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('HTML file downloaded successfully! Open it in your browser and use Ctrl+P to save as PDF.');
+    } catch (error) {
+      toast.error('Failed to export to HTML');
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+    toast.success('Print dialog opened');
+  };
+
+  const getSubjectColor = (subject: string): string => {
+    const colors: Record<string, string> = {
+      physics: '#3b82f6',
+      chemistry: '#10b981',
+      maths: '#f59e0b',
+      mathematics: '#f59e0b',
+      english: '#8b5cf6',
+      social: '#f97316',
+      language: '#ec4899',
+      mat: '#06b6d4',
+      botany: '#84cc16',
+      zoology: '#14b8a6',
+      computer: '#ef4444',
+      biology: '#84cc16',
+      history: '#f97316',
+      geography: '#10b981',
+      economics: '#8b5cf6'
+    };
+    return colors[subject.toLowerCase()] || '#6b7280';
+  };
+
+  const getPerformanceLevel = (percentage: number): { level: string; color: string } => {
+    if (percentage >= 90) return { level: 'Excellent', color: '#10b981' };
+    if (percentage >= 80) return { level: 'Very Good', color: '#3b82f6' };
+    if (percentage >= 70) return { level: 'Good', color: '#f59e0b' };
+    if (percentage >= 60) return { level: 'Average', color: '#f97316' };
+    return { level: 'Needs Improvement', color: '#ef4444' };
+  };
+
+  if (loading) {
+    return (
+      <div className="results-page">
+        <Toaster position="top-right" />
+        <div className="main-container">
+          <div className="loading">
+            <div className="spinner"></div>
+            <p>Loading results...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="results-page">
+        <Toaster position="top-right" />
+        <div className="main-container">
+          <div className="error">
+            <h2>Error Loading Results</h2>
+            <p>{error}</p>
+            <Link href="/" className="submit-btn" style={{ display: 'inline-block', marginTop: '20px' }} data-testid="link-back-upload">
+              <ArrowLeft size={20} />
+              Back to Upload
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!results) {
+    return (
+      <div className="results-page">
+        <Toaster position="top-right" />
+        <div className="main-container">
+          <div className="error">
+            <h2>No Results Found</h2>
+            <p>No results found for batch code: {batchCode}</p>
+            <Link href="/" className="submit-btn" style={{ display: 'inline-block', marginTop: '20px' }} data-testid="link-back-upload-no-results">
+              <ArrowLeft size={20} />
+              Back to Upload
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="results-page">
+      <Toaster position="top-right" />
+      
+      <div className="main-container">
+        {/* Header */}
+        <div className="results-header">
+          <div className="results-info">
+            <h1 data-testid="text-batch-code">Batch Code: {results.batchCode}</h1>
+            <p data-testid="text-batch-info">
+              Total Sheets: {results.totalSheets} • 
+              Processed: {results.processedSheets} •
+              Review Needed: {results.needsReview}
+            </p>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '10px', 
+              marginTop: '8px',
+              fontSize: '0.9rem'
+            }}>
+              <div style={{
+                padding: '4px 8px',
+                borderRadius: '12px',
+                fontSize: '0.8rem',
+                fontWeight: '500',
+                background: '#dcfce7',
+                color: '#166534'
+              }} data-testid="status-average-score">
+                📊 Average Score: {results.averageScore}%
+              </div>
+              <div style={{
+                padding: '4px 8px',
+                borderRadius: '12px',
+                fontSize: '0.8rem',
+                fontWeight: '500',
+                background: '#fff3f3',
+                color: '#991b1b'
+              }} data-testid="status-processing">
+                Processing Status
+              </div>
+            </div>
+          </div>
+          <div className="export-buttons">
+            <button onClick={exportToExcel} className="export-btn export-excel" data-testid="button-export-excel">
+              <Download size={16} />
+              Export to Excel
+            </button>
+            <button onClick={exportToPDF} className="export-btn export-pdf" data-testid="button-export-pdf">
+              <FileText size={16} />
+              Export to HTML
+            </button>
+            <button onClick={handlePrint} className="export-btn export-print" data-testid="button-print">
+              <Printer size={16} />
+              Print
+            </button>
+          </div>
+        </div>
+
+        {/* OMR Sheet Cards */}
+        <div className="subjects-grid-results">
+          {results.sheets.map((sheet, index) => {
+            const score = sheet.overallScore || 0;
+            const status = sheet.status;
+            const confidence = Math.round((sheet.confidence || 0) * 100);
+            
+            return (
+              <div 
+                key={index} 
+                className="sheet-card"
+                style={{ 
+                  opacity: status === 'processed' ? 1 : 0.8,
+                  border: `2px solid ${status === 'processed' ? '#10b981' : status === 'review_needed' ? '#f59e0b' : '#e5e7eb'}`
+                }}
+                data-testid={`card-sheet-${index}`}
+              >
+                <div className="sheet-header">
+                  <div>
+                    <h3 className="student-id" data-testid={`text-student-id-${index}`}>Student ID: {sheet.studentId}</h3>
+                    <p className="file-name" data-testid={`text-file-name-${index}`}>File: {sheet.fileName}</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div style={{
+                      padding: '4px 8px',
+                      background: status === 'processed' ? '#dcfce7' : status === 'review_needed' ? '#fef3c7' : '#f3f4f6',
+                      color: status === 'processed' ? '#166534' : status === 'review_needed' ? '#92400e' : '#6b7280',
+                      borderRadius: '12px',
+                      fontSize: '0.7rem',
+                      fontWeight: '500'
+                    }} data-testid={`status-sheet-${index}`}>
+                      {status}
+                    </div>
+                    <div style={{ 
+                      padding: '8px 12px', 
+                      background: confidence >= 90 ? '#dcfce7' : confidence >= 70 ? '#fef3c7' : '#fee2e2',
+                      color: confidence >= 90 ? '#166534' : confidence >= 70 ? '#92400e' : '#991b1b',
+                      borderRadius: '20px',
+                      fontSize: '0.8rem',
+                      fontWeight: '600'
+                    }} data-testid={`confidence-${index}`}>
+                      {confidence}% confidence
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="progress-bar">
+                  <div 
+                    className="progress-fill"
+                    style={{ 
+                      width: `${sheet.overallScore}%`,
+                      background: sheet.status === 'processed' ? '#10b981' : '#d1d5db'
+                    }}
+                    data-testid={`progress-fill-${index}`}
+                  ></div>
+                </div>
+                
+                <div className="percentage" style={{ 
+                  color: sheet.status === 'processed' ? '#10b981' : '#6b7280' 
+                }} data-testid={`text-percentage-${index}`}>
+                  {sheet.overallScore}%
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Detailed Table */}
+        <div className="summary-table">
+          <h2>Detailed Subject Analysis</h2>
+          <div style={{ 
+            background: '#f8fafc', 
+            padding: '15px', 
+            borderRadius: '8px', 
+            marginBottom: '20px',
+            border: '1px solid #e2e8f0'
+          }}>
+            <h4 style={{ margin: '0 0 10px 0', color: '#374151' }}>📊 Rating System:</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#10b981' }}></div>
+                <span><strong>Excellent:</strong> 5 points (90%+)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#f59e0b' }}></div>
+                <span><strong>Good:</strong> 3 points (70-89%)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ef4444' }}></div>
+                <span><strong>Poor:</strong> 1 point (Below 70%)</span>
+              </div>
+            </div>
+            <p style={{ margin: '10px 0 0 0', fontSize: '0.9rem', color: '#6b7280' }}>
+              💡 <strong>Any marking style accepted:</strong> Ticks, crosses, shading, filled shapes, underlines, or any creative marking!
+            </p>
+          </div>
+
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Subject</th>
+                <th>Status</th>
+                <th>Percentage</th>
+                <th>Teacher Name</th>
+                <th>Performance Level</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.subjects.map((subject, index) => {
+                const isUploaded = subject.isUploaded !== false;
+                const performance = getPerformanceLevel(subject.percentage);
+                return (
+                  <tr key={index} style={{ opacity: isUploaded ? 1 : 0.7 }} data-testid={`row-subject-${index}`}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div 
+                          style={{ 
+                            width: '12px', 
+                            height: '12px', 
+                            borderRadius: '50%', 
+                            background: isUploaded ? getSubjectColor(subject.subject) : '#d1d5db' 
+                          }}
+                        ></div>
+                        {subject.subject}
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{
+                        padding: '4px 8px',
+                        borderRadius: '12px',
+                        fontSize: '0.8rem',
+                        fontWeight: '500',
+                        background: isUploaded ? '#dcfce7' : '#f3f4f6',
+                        color: isUploaded ? '#166534' : '#6b7280'
+                      }}>
+                        {isUploaded ? 'Processed' : 'Not Uploaded'}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: '600', color: isUploaded ? getSubjectColor(subject.subject) : '#6b7280' }}>
+                      {subject.percentage}%
+                    </td>
+                    <td>{subject.teacherName}</td>
+                    <td>
+                      <span style={{
+                        padding: '4px 8px',
+                        borderRadius: '12px',
+                        fontSize: '0.8rem',
+                        fontWeight: '500',
+                        background: isUploaded ? (performance.color + '20') : '#f3f4f6',
+                        color: isUploaded ? performance.color : '#6b7280'
+                      }}>
+                        {isUploaded ? performance.level : 'No Data'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ResultsPage;

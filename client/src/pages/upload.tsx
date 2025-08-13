@@ -36,19 +36,16 @@ const UploadPage = () => {
     // Basic file type validation for OMR sheets
     const allowedTypes = ["application/pdf", "image/jpeg", "image/png"];
     const allowedExtensions = [".pdf", ".jpg", ".jpeg", ".png"];
-    
+
     const isValidType = allowedTypes.includes(file.type);
     const isValidExtension = allowedExtensions.some((ext) =>
       file.name.toLowerCase().endsWith(ext)
     );
-    
+
     // Size validation for OMR sheets (must be reasonable size)
-    const isReasonableSize = file.size >= 50 * 1024 && file.size <= 15 * 1024 * 1024; // 50KB to 15MB
-    
-    // Name pattern validation for OMR sheets
-    const omrPattern = /^(omr|feedback|sheet|scan|form)/i;
-    const hasOMRKeyword = omrPattern.test(file.name) || file.name.toLowerCase().includes('omr');
-    
+    const isReasonableSize =
+      file.size >= 50 * 1024 && file.size <= 15 * 1024 * 1024; // 50KB to 15MB
+
     return isValidType && isValidExtension && isReasonableSize;
   };
 
@@ -111,11 +108,15 @@ const UploadPage = () => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: name === "totalStudents" ? parseInt(value) || 0 : value,
     }));
   };
 
-  const handleSubjectChange = (index: number, field: string, value: string) => {
+  const handleSubjectChange = (
+    index: number,
+    field: "subjectName" | "teacherName",
+    value: string
+  ) => {
     const newSubjects = [...subjects];
     newSubjects[index][field] = value;
     setSubjects(newSubjects);
@@ -184,41 +185,68 @@ const UploadPage = () => {
     }
 
     setIsUploading(true);
+    const uploadToastId = toast.loading("Starting OMR processing...");
 
     try {
-      // Create FormData for file upload
+      // Transform subjects to the expected format
+      const transformedSubjects = validSubjects.map(subject => ({
+        subject: subject.subjectName,
+        teacherName: subject.teacherName,
+        percentage: 0,
+        isUploaded: false
+      }));
+
+      // Create batch first
+      try {
+        const batchResponse = await axios.post("/api/batches", {
+          batchCode: formData.batchCode,
+          name: `Batch ${formData.batchCode}`,
+          description: formData.phase,
+          totalStudents: formData.totalStudents,
+          subjects: transformedSubjects,
+        });
+      } catch (error: any) {
+        console.error("Error creating batch:", error);
+        toast.error(error.response?.data?.error || "Failed to create batch");
+        throw error;
+      }
+
+      // Then upload files
       const uploadFormData = new FormData();
       uploadFormData.append("batchCode", formData.batchCode);
-      uploadFormData.append("phase", formData.phase);
-      uploadFormData.append("totalStudents", formData.totalStudents.toString());
-      uploadFormData.append("subjects", JSON.stringify(validSubjects));
-
       uploadedFiles.forEach((file) => {
-        uploadFormData.append(`omrSheets`, file);
+        uploadFormData.append("files", file);
       });
 
-      const response = await axios.post("http://localhost:5001/api/upload-omr", uploadFormData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-        onUploadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const percentCompleted = Math.round(
-              (progressEvent.loaded * 100) / progressEvent.total
-            );
-            toast.loading(`Processing OMR sheets... ${percentCompleted}%`, { id: "upload" });
-          }
-        },
-      });
+      const response = await axios.post(
+        `/api/upload/${formData.batchCode}`,
+        uploadFormData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+          onUploadProgress: (progressEvent) => {
+            if (progressEvent.total) {
+              const percentCompleted = Math.round(
+                (progressEvent.loaded * 100) / progressEvent.total
+              );
+              toast.loading(
+                `Processing OMR sheets... ${percentCompleted}%`,
+                { id: uploadToastId }
+              );
+            }
+          },
+        }
+      );
 
-      toast.dismiss("upload");
+      toast.dismiss(uploadToastId);
       console.log("✅ OMR processing successful:", response.data);
       toast.success("OMR sheets processed successfully!");
 
       // Navigate to results page
       navigate(`/results/${formData.batchCode}`);
     } catch (error: any) {
-      toast.dismiss("upload");
+      toast.dismiss(uploadToastId);
       console.error("OMR processing error:", error);
       toast.error(
         error.response?.data?.message || "Failed to process OMR sheets"
@@ -252,7 +280,7 @@ const UploadPage = () => {
   return (
     <div className="upload-page">
       <Toaster position="top-right" />
-      
+
       <div className="main-container">
         {/* Header */}
         <div className="page-header">
@@ -340,7 +368,7 @@ const UploadPage = () => {
               {subjects.map((subject, index) => {
                 const isDuplicate =
                   subjects.filter(
-                    (s, i) =>
+                    (s) =>
                       s.subjectName.toLowerCase().trim() ===
                         subject.subjectName.toLowerCase().trim() &&
                       s.subjectName.trim() !== ""
@@ -408,7 +436,11 @@ const UploadPage = () => {
                 <span>OMR Sheet Upload</span>
               </div>
 
-              <div {...getRootProps()} className={`dropzone ${isDragActive ? 'active' : ''}`} data-testid="dropzone-omr">
+              <div
+                {...getRootProps()}
+                className={`dropzone ${isDragActive ? "active" : ""}`}
+                data-testid="dropzone-omr"
+              >
                 <input {...getInputProps()} />
                 <div className="dropzone-content">
                   <Upload size={48} className="dropzone-icon" />
@@ -431,7 +463,11 @@ const UploadPage = () => {
                   <h4>Uploaded OMR Sheets ({uploadedFiles.length})</h4>
                   <div className="file-list">
                     {uploadedFiles.map((file, index) => (
-                      <div key={index} className="file-item" data-testid={`file-item-${index}`}>
+                      <div
+                        key={index}
+                        className="file-item"
+                        data-testid={`file-item-${index}`}
+                      >
                         <div className="file-info">
                           <FileText size={20} />
                           <div>
